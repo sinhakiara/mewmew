@@ -1,7 +1,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
+@import '@fortawesome/fontawesome-free/css/all.min.css';
 /* Workflow Editor Design System - n8n inspired */
 
 @layer base {

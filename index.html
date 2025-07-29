@@ -1,27 +1,49 @@
 <!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Security Workflow Engine</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <meta name="description" content="Distributed security testing workflow engine with n8n-inspired visual editor" />
-    <meta name="author" content="Security Workflow Team" />
-
-    <meta property="og:title" content="Security Workflow Engine" />
-    <meta property="og:description" content="Distributed security testing workflow engine with visual node editor" />
-    <meta property="og:type" content="website" />
-    <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
-
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@lovable_dev" />
-    <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
-  </head>
-
-  <body>
+<html lang="en" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dheeraj Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/jsplumb@2.15.6/dist/js/jsplumb.min.js"></script>
+    <style>
+        :root {
+            --primary: 99 102 241;
+            --secondary: 139 92 246;
+            --background: 248 250 252;
+            --text: 15 23 42;
+            --text-muted: 100 116 139;
+            --error: 239 68 68;
+            --warning: 245 158 11;
+            --info: 59 130 246;
+            --success: 16 185 129;
+        }
+        [data-theme="dark"] {
+            --primary: 129 140 248;
+            --secondary: 196 181 253;
+            --background: 15 23 42;
+            --text: 241 245 249;
+            --text-muted: 148 163 184;
+            --error: 248 113 113;
+            --warning: 251 191 36;
+            --info: 96 165 250;
+            --success: 52 211 153;
+        }
+        .task-status-pending { background-color: rgba(var(--warning), 0.1); color: rgb(var(--warning)); }
+        .task-status-running { background-color: rgba(var(--info), 0.1); color: rgb(var(--info)); }
+        .task-status-completed { background-color: rgba(var(--success), 0.1); color: rgb(var(--success)); }
+        .task-status-failed { background-color: rgba(var(--error), 0.1); color: rgb(var(--error)); }
+        .worker-status-active { background-color: rgba(var(--success), 0.1); color: rgb(var(--success)); }
+        .worker-status-inactive { background-color: rgba(var(--error), 0.1); color: rgb(var(--error)); }
+        .modal-overlay { animation: fadeIn 0.2s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .modal-content { animation: slideIn 0.2s ease-in-out; }
+        @keyframes slideIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    </style>
+</head>
+<body class="min-h-screen overflow-hidden bg-gray-50">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-  </body>
+</body>
 </html>

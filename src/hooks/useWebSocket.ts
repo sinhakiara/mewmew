@@ -17,7 +17,8 @@ interface WebSocketHookReturn {
 
 export const useWebSocket = (url: string): WebSocketHookReturn => {
   // Handle cases where backend might not be available
-  const safeUrl = url.includes('localhost') || url.includes('192.168') ? url : 'ws://localhost:8000/ws/logs';
+  //const safeUrl = url.includes('localhost') || url.includes('192.168') ? url : 'ws://localhost:8000/ws/logs';
+  const safeUrl = url.includes('localhost') || url.includes('192.168') ? url : 'ws://192.168.29.20:8000/ws/logs';
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting'>('disconnected');
   const wsRef = useRef<WebSocket | null>(null);
