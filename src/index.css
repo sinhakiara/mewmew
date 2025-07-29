@@ -1,0 +1,398 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Workflow Editor Design System - n8n inspired */
+
+@layer base {
+  :root {
+    /* Core Colors */
+    --background: 210 20% 98%;
+    --foreground: 220 13% 18%;
+    --canvas: 220 13% 96%;
+    
+    /* Node Colors */
+    --node-bg: 0 0% 100%;
+    --node-border: 220 13% 91%;
+    --node-shadow: 220 13% 18% / 0.08;
+    --node-selected: 259 94% 67%;
+    --node-hover: 220 13% 91%;
+    
+    /* Tool Categories */
+    --tool-recon: 210 100% 56%;
+    --tool-scanning: 27 96% 61%;
+    --tool-fuzzing: 346 87% 43%;
+    --tool-exploit: 0 84% 60%;
+    
+    /* Connection Colors */
+    --connection-default: 220 13% 91%;
+    --connection-active: 259 94% 67%;
+    --connection-hover: 220 13% 69%;
+    
+    /* Status Colors */
+    --status-pending: 45 93% 47%;
+    --status-running: 221 83% 53%;
+    --status-success: 142 71% 45%;
+    --status-failed: 0 84% 60%;
+    
+    /* UI Elements */
+    --primary: 259 94% 67%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 13% 95%;
+    --secondary-foreground: 220 13% 18%;
+    --accent: 210 100% 56%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --muted: 220 13% 95%;
+    --muted-foreground: 220 9% 46%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 259 94% 67%;
+    
+    /* Spacing & Layout */
+    --radius: 0.5rem;
+    --node-spacing: 200px;
+    --grid-size: 20px;
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+}
+
+/* Workflow Editor Styles */
+.workflow-editor {
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
+.workflow-canvas {
+  background-color: hsl(var(--canvas));
+  background-image: 
+    radial-gradient(circle, hsl(var(--border)) 1px, transparent 1px);
+  background-size: var(--grid-size) var(--grid-size);
+  position: relative;
+  overflow: auto;
+  cursor: grab;
+}
+
+.workflow-canvas:active {
+  cursor: grabbing;
+}
+
+/* Node Styles */
+.workflow-node {
+  position: absolute;
+  background: hsl(var(--node-bg));
+  border: 2px solid hsl(var(--node-border));
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px hsl(var(--node-shadow));
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease;
+  min-width: 200px;
+  min-height: 80px;
+}
+
+.workflow-node:hover {
+  border-color: hsl(var(--node-hover));
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px hsl(var(--node-shadow));
+}
+
+.workflow-node.selected {
+  border-color: hsl(var(--node-selected));
+  box-shadow: 0 0 0 3px hsl(var(--node-selected) / 0.2);
+}
+
+.workflow-node.dragging {
+  transform: rotate(2deg);
+  z-index: 1000;
+}
+
+/* Node Header */
+.node-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid hsl(var(--border));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.node-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  color: white;
+}
+
+.node-icon.recon { background: hsl(var(--tool-recon)); }
+.node-icon.scanning { background: hsl(var(--tool-scanning)); }
+.node-icon.fuzzing { background: hsl(var(--tool-fuzzing)); }
+.node-icon.exploit { background: hsl(var(--tool-exploit)); }
+
+.node-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: hsl(var(--foreground));
+}
+
+.node-status {
+  margin-left: auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: hsl(var(--border));
+}
+
+.node-status.pending { background: hsl(var(--status-pending)); }
+.node-status.running { background: hsl(var(--status-running)); animation: pulse 2s infinite; }
+.node-status.success { background: hsl(var(--status-success)); }
+.node-status.failed { background: hsl(var(--status-failed)); }
+
+/* Node Content */
+.node-content {
+  padding: 12px 16px;
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Connection Points */
+.node-connection {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid hsl(var(--node-border));
+  background: hsl(var(--node-bg));
+  border-radius: 50%;
+  cursor: crosshair;
+  transition: all 0.2s ease;
+}
+
+.node-connection:hover {
+  border-color: hsl(var(--connection-active));
+  transform: scale(1.2);
+}
+
+.node-connection.input {
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.node-connection.output {
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* SVG Connections */
+.workflow-connections {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.connection-path {
+  fill: none;
+  stroke: hsl(var(--connection-default));
+  stroke-width: 2;
+  transition: stroke 0.2s ease;
+}
+
+.connection-path:hover,
+.connection-path.active {
+  stroke: hsl(var(--connection-active));
+  stroke-width: 3;
+}
+
+/* Toolbar */
+.workflow-toolbar {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: hsl(var(--node-bg));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px hsl(var(--node-shadow));
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  z-index: 100;
+}
+
+/* Node Palette */
+.node-palette {
+  position: absolute;
+  left: 20px;
+  top: 100px;
+  width: 280px;
+  background: hsl(var(--node-bg));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px hsl(var(--node-shadow));
+  z-index: 100;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+}
+
+.palette-section {
+  padding: 16px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.palette-title {
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: hsl(var(--foreground));
+}
+
+.palette-node {
+  padding: 8px 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  margin-bottom: 8px;
+  cursor: grab;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.palette-node:hover {
+  border-color: hsl(var(--node-selected));
+  transform: translateX(4px);
+}
+
+.palette-node:active {
+  cursor: grabbing;
+}
+
+/* Execution Panel */
+.execution-panel {
+  position: absolute;
+  right: 20px;
+  top: 20px;
+  width: 320px;
+  background: hsl(var(--node-bg));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px hsl(var(--node-shadow));
+  z-index: 100;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+.execution-header {
+  padding: 16px;
+  border-bottom: 1px solid hsl(var(--border));
+  font-weight: 600;
+}
+
+.execution-logs {
+  padding: 16px;
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+
+.log-entry {
+  margin-bottom: 8px;
+  padding: 8px;
+  border-radius: 4px;
+  border-left: 3px solid hsl(var(--border));
+}
+
+.log-entry.info { border-left-color: hsl(var(--accent)); }
+.log-entry.success { border-left-color: hsl(var(--status-success)); }
+.log-entry.error { border-left-color: hsl(var(--status-failed)); }
+.log-entry.warning { border-left-color: hsl(var(--status-pending)); }
+
+/* Animations */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes flow {
+  0% { stroke-dashoffset: 20; }
+  100% { stroke-dashoffset: 0; }
+}
+
+.connection-path.executing {
+  stroke-dasharray: 5, 5;
+  animation: flow 1s linear infinite;
+}
