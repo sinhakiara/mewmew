@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import LoginModal from './components/LoginModal';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -20,6 +20,7 @@ interface Task {
     output: string;
     created_at: string;
     queue?: string;
+    worker_id?: string | null;
 }
 
 interface Worker {
@@ -56,19 +57,28 @@ interface ConfirmationModalProps {
 const CONFIG = {
     //BASE_URL: window.location.hostname === 'localhost' ? 'http://localhost:5000' : `http://${window.location.hostname}:5000`,
     BASE_URL: window.location.hostname === 'localhost' ? 'http://localhost:5000' : `https://192.168.29.20:8000`,
+    WS_URL: window.location.hostname === 'localhost' ? 'ws://localhost:5000' : 'wss://192.168.29.20:8000',
     REFRESH_INTERVAL: 5000,
     MAX_LOG_ENTRIES: 100,
     TOKEN_KEY: 'dheeraj_token',
+    REFRESH_TOKEN_KEY: 'dheeraj_refresh_token',
     USER_KEY: 'dheeraj_user',
     THEME_KEY: 'dheeraj_theme',
     MAX_RETRIES: 3,
     RETRY_DELAY: 1000,
+    HEARTBEAT_TIMEOUT: 30000, // 30 seconds to consider worker inactive if no heartbeat
 };
 
-const apiRequest = async (endpoint: string, method: string = 'GET', data: any = null, token: string, retries: number = CONFIG.MAX_RETRIES): Promise<any> => {
+const apiRequest = async (
+    endpoint: string,
+    method: string = 'GET',
+    data: any = null,
+    token: string,
+    retries: number = CONFIG.MAX_RETRIES
+): Promise<any> => {
     const url = `${CONFIG.BASE_URL}${endpoint}`;
     const headers: HeadersInit = { 'Content-Type': 'application/json' };
-    if (token && !endpoint.includes('/api/login')) {
+    if (token && !endpoint.includes('/api/login') && !endpoint.includes('/api/refresh')) {
         headers['Authorization'] = `Bearer ${token}`;
     }
     const options: RequestInit = { method, headers, credentials: 'include' };
@@ -77,15 +87,18 @@ const apiRequest = async (endpoint: string, method: string = 'GET', data: any = 
     try {
         const response = await fetch(url, options);
         if (!response.ok) {
+            if (method === 'POST' && endpoint === '/tasks' && response.status >= 300 && response.status < 400) {
+                return await response.json();
+            }
             const errorData = await response.json().catch(() => ({}));
-            const error = new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            const error = new Error(errorData.detail || errorData.error || `HTTP error! status: ${response.status}`);
             (error as any).status = response.status;
             throw error;
         }
         return await response.json();
     } catch (error) {
         if (retries > 0 && (error as any).status !== 401) {
-            await new Promise(resolve => setTimeout(resolve, CONFIG.RETRY_DELAY));
+            await new Promise((resolve) => setTimeout(resolve, CONFIG.RETRY_DELAY));
             return apiRequest(endpoint, method, data, token, retries - 1);
         }
         throw error;
@@ -95,7 +108,10 @@ const apiRequest = async (endpoint: string, method: string = 'GET', data: any = 
 const App: React.FC = () => {
     const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
     const [token, setToken] = useState<string>(localStorage.getItem(CONFIG.TOKEN_KEY) || '');
-    const [user, setUser] = useState<{ username?: string }>(JSON.parse(localStorage.getItem(CONFIG.USER_KEY) || '{}'));
+    const [refreshToken, setRefreshToken] = useState<string>(localStorage.getItem(CONFIG.REFRESH_TOKEN_KEY) || '');
+    const [user, setUser] = useState<{ username?: string }>(
+        JSON.parse(localStorage.getItem(CONFIG.USER_KEY) || '{}')
+    );
     const [theme, setTheme] = useState<string>(localStorage.getItem(CONFIG.THEME_KEY) || 'light');
     const [connectionStatus, setConnectionStatus] = useState<string>('connecting');
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -118,12 +134,44 @@ const App: React.FC = () => {
         onConfirm: () => {},
         onCancel: () => {},
     });
+    const [workerLastHeartbeat, setWorkerLastHeartbeat] = useState<Record<string, number>>({});
 
+    // Check token validity on mount using /api/refresh
+    useEffect(() => {
+        const checkAuth = async () => {
+            const savedRefreshToken = localStorage.getItem(CONFIG.REFRESH_TOKEN_KEY);
+            if (savedRefreshToken) {
+                try {
+                    const response = await apiRequest('/api/refresh', 'POST', { refresh_token: savedRefreshToken }, '');
+                    setToken(response.access_token);
+                    setRefreshToken(savedRefreshToken);
+                    setIsAuthenticated(true);
+                    setUser(JSON.parse(localStorage.getItem(CONFIG.USER_KEY) || '{}'));
+                    localStorage.setItem(CONFIG.TOKEN_KEY, response.access_token);
+                } catch (error: any) {
+                    console.error('Token refresh failed:', error);
+                    setIsAuthenticated(false);
+                    setToken('');
+                    setRefreshToken('');
+                    setUser({});
+                    localStorage.removeItem(CONFIG.TOKEN_KEY);
+                    localStorage.removeItem(CONFIG.REFRESH_TOKEN_KEY);
+                    localStorage.removeItem(CONFIG.USER_KEY);
+                }
+            } else {
+                setIsAuthenticated(false);
+            }
+        };
+        checkAuth();
+    }, []);
+
+    // Theme management
     useEffect(() => {
         document.documentElement.className = theme;
         localStorage.setItem(CONFIG.THEME_KEY, theme);
     }, [theme]);
 
+    // Hash change for section navigation
     useEffect(() => {
         const hash = window.location.hash.slice(1);
         if (hash) setActiveSection(hash);
@@ -136,30 +184,105 @@ const App: React.FC = () => {
         return () => window.removeEventListener('hashchange', handleHashChange);
     }, []);
 
+    // WebSocket for real-time logs and worker status
     useEffect(() => {
-        if (!token) return;
+        if (!isAuthenticated || !token) return;
+
+        const ws = new WebSocket(`${CONFIG.WS_URL}/ws/logs`);
+
+        ws.onopen = () => {
+            console.log('WebSocket connected to /ws/logs');
+            setConnectionStatus('connected');
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                console.log('WebSocket message:', data);
+
+                // Add to logs
+                if (data.worker_id && data.message && data.level) {
+                    setLogs((prev) => [
+                        ...prev,
+                        {
+                            level: data.level,
+                            message: `${data.worker_id.substring(0, 8)}...: ${data.message}`,
+                            timestamp: new Date().toLocaleString(),
+                        },
+                    ].slice(-CONFIG.MAX_LOG_ENTRIES));
+
+                    // Update worker status based on heartbeat or activity
+                    if (data.message.includes('completed') || data.message.includes('Heartbeat')) {
+                        const workerId = data.worker_id;
+                        setWorkerLastHeartbeat((prev) => ({
+                            ...prev,
+                            [workerId]: Date.now(),
+                        }));
+                        setWorkers((prev) =>
+                            prev.map((w) =>
+                                w.id === workerId ? { ...w, is_active: true } : w
+                            )
+                        );
+                    }
+                }
+            } catch (error) {
+                console.error('WebSocket message parse error:', error);
+            }
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            setConnectionStatus('disconnected');
+        };
+
+        ws.onclose = () => {
+            console.log('WebSocket disconnected');
+            setConnectionStatus('disconnected');
+        };
+
+        return () => {
+            ws.close();
+        };
+    }, [isAuthenticated, token]);
+
+    // Data fetching with polling as fallback
+    useEffect(() => {
+        if (!isAuthenticated || !token) return;
 
         const fetchData = async () => {
             try {
-                const [workersData, tasksData, masternodeData, logsData] = await Promise.all([
+                const [workersData, workerStatusData, tasksData, masternodeData, logsData] = await Promise.all([
                     apiRequest('/api/workers', 'GET', null, token),
+                    apiRequest('/api/workers/status', 'GET', null, token),
                     apiRequest('/api/tasks', 'GET', null, token),
                     apiRequest('/api/masternode', 'GET', null, token),
                     apiRequest('/api/logs', 'GET', null, token),
                 ]);
 
-                const activeWorkers = Object.values(workersData).filter((w: any) => w.is_active).length;
+                console.log('Raw /api/workers response:', workersData);
+                console.log('Raw /api/workers/status response:', workerStatusData);
+
+                // Merge workers data with status
+                const processedWorkers = Object.entries(workersData).map(([id, worker]: [string, any]) => ({
+                    id,
+                    ...worker.worker_details,
+                    is_active: workerStatusData[id]?.is_active ?? false,
+                    registered_at: worker.worker_details?.registered_at || undefined,
+                }));
+
+                // Update is_active based on recent heartbeats
+                const now = Date.now();
+                const updatedWorkers = processedWorkers.map((worker) => ({
+                    ...worker,
+                    is_active: workerLastHeartbeat[worker.id] && (now - workerLastHeartbeat[worker.id] < CONFIG.HEARTBEAT_TIMEOUT) ? true : worker.is_active,
+                }));
+
+                const activeWorkers = updatedWorkers.filter((w) => w.is_active).length;
                 const activeTasks = tasksData.filter((t: Task) => ['pending', 'running'].includes(t.status)).length;
                 const completedTasks = tasksData.filter((t: Task) => t.status === 'completed').length;
 
                 setStats({ activeWorkers, activeTasks, completedTasks });
-                setWorkers(
-                    Object.entries(workersData).map(([id, worker]: [string, any]) => ({
-                        id,
-                        ...worker.worker_details,
-                        is_active: worker.is_active,
-                    }))
-                );
+                setWorkers(updatedWorkers);
                 setTasks(tasksData);
                 setMasternode(Object.values(masternodeData)[0]?.masternode_details || null);
                 setLogs(
@@ -173,11 +296,29 @@ const App: React.FC = () => {
             } catch (error: any) {
                 console.error('Data fetch failed:', error);
                 setConnectionStatus('disconnected');
+                setLogs((prev) => [
+                    ...prev,
+                    {
+                        level: 'error',
+                        message: `Data fetch failed: ${error.message}`,
+                        timestamp: new Date().toLocaleString(),
+                    },
+                ].slice(-CONFIG.MAX_LOG_ENTRIES));
                 if (error.status === 401) {
-                    setIsAuthenticated(false);
-                    setToken('');
-                    localStorage.removeItem(CONFIG.TOKEN_KEY);
-                    localStorage.removeItem(CONFIG.USER_KEY);
+                    try {
+                        const response = await apiRequest('/api/refresh', 'POST', { refresh_token: refreshToken }, '');
+                        setToken(response.access_token);
+                        localStorage.setItem(CONFIG.TOKEN_KEY, response.access_token);
+                    } catch (refreshError: any) {
+                        console.error('Token refresh failed:', refreshError);
+                        setIsAuthenticated(false);
+                        setToken('');
+                        setRefreshToken('');
+                        setUser({});
+                        localStorage.removeItem(CONFIG.TOKEN_KEY);
+                        localStorage.removeItem(CONFIG.REFRESH_TOKEN_KEY);
+                        localStorage.removeItem(CONFIG.USER_KEY);
+                    }
                 }
             }
         };
@@ -185,7 +326,25 @@ const App: React.FC = () => {
         fetchData();
         const interval = setInterval(fetchData, CONFIG.REFRESH_INTERVAL);
         return () => clearInterval(interval);
-    }, [token]);
+    }, [isAuthenticated, token, refreshToken, workerLastHeartbeat]);
+
+    // Update worker status based on heartbeat timeout
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const now = Date.now();
+            setWorkers((prev) =>
+                prev.map((worker) => ({
+                    ...worker,
+                    is_active: workerLastHeartbeat[worker.id] && (now - workerLastHeartbeat[worker.id] < CONFIG.HEARTBEAT_TIMEOUT) ? true : false,
+                }))
+            );
+            setStats((prev) => ({
+                ...prev,
+                activeWorkers: workers.filter((w) => workerLastHeartbeat[w.id] && (now - workerLastHeartbeat[w.id] < CONFIG.HEARTBEAT_TIMEOUT)).length,
+            }));
+        }, CONFIG.HEARTBEAT_TIMEOUT / 2); // Check every half timeout period
+        return () => clearInterval(interval);
+    }, [workerLastHeartbeat, workers]);
 
     useEffect(() => {
         setPreviousStats(stats);
@@ -193,11 +352,13 @@ const App: React.FC = () => {
 
     const handleLogin = async (username: string, password: string) => {
         try {
-            const response = await apiRequest('/api/login', 'POST', { username, password }, token);
-            setToken(response.token);
+            const response = await apiRequest('/api/login', 'POST', { username, password }, '');
+            setToken(response.access_token);
+            setRefreshToken(response.refresh_token || '');
             setUser({ username: response.username });
             setIsAuthenticated(true);
-            localStorage.setItem(CONFIG.TOKEN_KEY, response.token);
+            localStorage.setItem(CONFIG.TOKEN_KEY, response.access_token);
+            localStorage.setItem(CONFIG.REFRESH_TOKEN_KEY, response.refresh_token || '');
             localStorage.setItem(CONFIG.USER_KEY, JSON.stringify({ username: response.username }));
             setLoginError('');
         } catch (error: any) {
@@ -208,8 +369,10 @@ const App: React.FC = () => {
     const handleLogout = () => {
         setIsAuthenticated(false);
         setToken('');
+        setRefreshToken('');
         setUser({});
         localStorage.removeItem(CONFIG.TOKEN_KEY);
+        localStorage.removeItem(CONFIG.REFRESH_TOKEN_KEY);
         localStorage.removeItem(CONFIG.USER_KEY);
         setTasks([]);
         setWorkers([]);
@@ -217,13 +380,14 @@ const App: React.FC = () => {
         setLogs([]);
         setStats({ activeWorkers: 0, activeTasks: 0, completedTasks: 0 });
         setConnectionStatus('connecting');
+        setWorkerLastHeartbeat({});
     };
 
     const submitTask = async (command: string, resetCommand: () => void) => {
         if (!command.trim()) return;
         try {
             const response = await apiRequest('/tasks', 'POST', { command }, token);
-            setTasks(prev => [
+            setTasks((prev) => [
                 ...prev,
                 {
                     task_id: response.task_id,
@@ -231,9 +395,10 @@ const App: React.FC = () => {
                     status: 'pending',
                     output: '',
                     created_at: new Date().toISOString(),
+                    worker_id: response.worker_id,
                 },
             ]);
-            setLogs(prev => [
+            setLogs((prev) => [
                 ...prev,
                 {
                     level: 'info',
@@ -242,9 +407,11 @@ const App: React.FC = () => {
                 },
             ].slice(-CONFIG.MAX_LOG_ENTRIES));
             resetCommand();
+            setActiveSection('tasks');
+            window.location.hash = '#tasks';
         } catch (error: any) {
             console.error('Task submission failed:', error);
-            setLogs(prev => [
+            setLogs((prev) => [
                 ...prev,
                 {
                     level: 'error',
@@ -252,6 +419,8 @@ const App: React.FC = () => {
                     timestamp: new Date().toLocaleString(),
                 },
             ].slice(-CONFIG.MAX_LOG_ENTRIES));
+            setActiveSection('tasks');
+            window.location.hash = '#tasks';
         }
     };
 
@@ -261,7 +430,7 @@ const App: React.FC = () => {
             setTaskDetails(task);
         } catch (error: any) {
             console.error('Fetch task details failed:', error);
-            setLogs(prev => [
+            setLogs((prev) => [
                 ...prev,
                 {
                     level: 'error',
@@ -274,7 +443,7 @@ const App: React.FC = () => {
 
     const showWorkerDetails = async (workerId: string) => {
         try {
-            const worker = workers.find(w => w.id === workerId);
+            const worker = workers.find((w) => w.id === workerId);
             if (worker) {
                 setWorkerDetails(worker);
             } else {
@@ -282,7 +451,7 @@ const App: React.FC = () => {
             }
         } catch (error: any) {
             console.error('Fetch worker details failed:', error);
-            setLogs(prev => [
+            setLogs((prev) => [
                 ...prev,
                 {
                     level: 'error',
@@ -301,8 +470,13 @@ const App: React.FC = () => {
             onConfirm: async () => {
                 try {
                     await apiRequest(`/workers/${workerId}`, 'DELETE', null, token);
-                    setWorkers(prev => prev.filter(w => w.id !== workerId));
-                    setLogs(prev => [
+                    setWorkers((prev) => prev.filter((w) => w.id !== workerId));
+                    setWorkerLastHeartbeat((prev) => {
+                        const newHeartbeats = { ...prev };
+                        delete newHeartbeats[workerId];
+                        return newHeartbeats;
+                    });
+                    setLogs((prev) => [
                         ...prev,
                         {
                             level: 'success',
@@ -313,7 +487,7 @@ const App: React.FC = () => {
                     setConfirmationModal({ isOpen: false, title: '', message: '', onConfirm: () => {}, onCancel: () => {} });
                 } catch (error: any) {
                     console.error('Worker removal failed:', error);
-                    setLogs(prev => [
+                    setLogs((prev) => [
                         ...prev,
                         {
                             level: 'error',
@@ -329,7 +503,7 @@ const App: React.FC = () => {
     };
 
     const exportLogs = () => {
-        const data = logs.map(log => `${log.timestamp} [${log.level.toUpperCase()}]: ${log.message}`).join('\n');
+        const data = logs.map((log) => `${log.timestamp} [${log.level.toUpperCase()}]: ${log.message}`).join('\n');
         const blob = new Blob([data], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -337,7 +511,7 @@ const App: React.FC = () => {
         a.download = `dheeraj_logs_${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
         a.click();
         URL.revokeObjectURL(url);
-        setLogs(prev => [
+        setLogs((prev) => [
             ...prev,
             {
                 level: 'success',
@@ -355,7 +529,7 @@ const App: React.FC = () => {
             onConfirm: () => {
                 setLogs([]);
                 setConfirmationModal({ isOpen: false, title: '', message: '', onConfirm: () => {}, onCancel: () => {} });
-                setLogs(prev => [
+                setLogs((prev) => [
                     ...prev,
                     {
                         level: 'success',
@@ -402,12 +576,18 @@ const App: React.FC = () => {
                                 <InsightsSection stats={stats} previousStats={previousStats} tasks={tasks} showTaskDetails={showTaskDetails} />
                             )}
                             {activeSection === 'tasks' && (
-                                <TasksSection tasks={tasks} submitTask={submitTask} showTaskDetails={showTaskDetails} showAiSuggestModal={showAiSuggestModal} />
+                                <TasksSection
+                                    tasks={tasks}
+                                    submitTask={submitTask}
+                                    showTaskDetails={showTaskDetails}
+                                    showAiSuggestModal={showAiSuggestModal}
+                                />
                             )}
                             {activeSection === 'workers' && (
                                 <WorkersSection workers={workers} showWorkerDetails={showWorkerDetails} removeWorker={removeWorker} />
                             )}
-                            {activeSection === 'workflow' && <WorkflowSection masternode={masternode} workers={workers} />}
+                            {activeSection === 'workflow' && <WorkflowSection masternode={masternode} workers={workers} />
+                            }
                             {activeSection === 'logs' && <LogsSection logs={logs} exportLogs={exportLogs} clearLogs={clearLogs} />}
                             {activeSection === 'apiDocs' && <ApiDocsSection />}
                         </main>

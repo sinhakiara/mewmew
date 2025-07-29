@@ -7,6 +7,7 @@ interface Task {
     output: string;
     created_at: string;
     queue?: string;
+    worker_id?: string | null;
 }
 
 interface TasksSectionProps {
@@ -60,6 +61,7 @@ const TasksSection: React.FC<TasksSectionProps> = ({ tasks, submitTask, showTask
                             <th className="p-3">Command</th>
                             <th className="p-3">Status</th>
                             <th className="p-3">Created At</th>
+			    <th className="p-3">Worker ID</th> {/* Added Worker ID column */}
                         </tr>
                     </thead>
                     <tbody>
@@ -73,6 +75,8 @@ const TasksSection: React.FC<TasksSectionProps> = ({ tasks, submitTask, showTask
                                 <td className="p-3 font-mono">{task.command.substring(0, 20)}...</td>
                                 <td className={`p-3 task-status-${task.status}`}>{task.status}</td>
                                 <td className="p-3">{new Date(task.created_at).toLocaleString()}</td>
+				<td className="p-3 font-mono">{task.worker_id ? task.worker_id.substring(0, 12) + '...' : 'Not assigned'}</td> {/* Display worker_id */}
+				{/*<td className="p-3 font-mono">{task.worker_id ? task.worker_id.substring(0, 8) + '...' : 'Not assigned'}</td>*/} {/* Display worker_id */}
                             </tr>
                         ))}
                     </tbody>
