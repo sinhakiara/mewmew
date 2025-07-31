@@ -1,3 +1,4 @@
+    //BASE_URL: window.location.hostname === 'localhost' ? 'http://localhost:5000' : `http://${window.location.hostname}:5000`,
 import React, { useState, useEffect } from 'react';
 import LoginModal from './components/LoginModal';
 import Sidebar from './components/Sidebar';
@@ -55,10 +56,9 @@ interface ConfirmationModalProps {
 }
 
 const CONFIG = {
-    //BASE_URL: window.location.hostname === 'localhost' ? 'http://localhost:5000' : `http://${window.location.hostname}:5000`,
-    BASE_URL: window.location.hostname === 'localhost' ? 'http://localhost:5000' : `https://192.168.29.20:8000`,
+    BASE_URL: window.location.hostname === 'localhost' ? 'http://localhost:5000' : 'https://192.168.29.20:8000',
     WS_URL: window.location.hostname === 'localhost' ? 'ws://localhost:5000' : 'wss://192.168.29.20:8000',
-    REFRESH_INTERVAL: 5000,
+    REFRESH_INTERVAL: 2000,
     MAX_LOG_ENTRIES: 100,
     TOKEN_KEY: 'dheeraj_token',
     REFRESH_TOKEN_KEY: 'dheeraj_refresh_token',
@@ -66,10 +66,12 @@ const CONFIG = {
     THEME_KEY: 'dheeraj_theme',
     MAX_RETRIES: 3,
     RETRY_DELAY: 1000,
-    HEARTBEAT_TIMEOUT: 30000, // 30 seconds to consider worker inactive if no heartbeat
+    HEARTBEAT_TIMEOUT: 60000,
+    WS_RECONNECT_INTERVAL: 5000,
+    WS_MAX_RECONNECT_ATTEMPTS: 5,
 };
 
-const apiRequest = async (
+export const apiRequest = async (
     endpoint: string,
     method: string = 'GET',
     data: any = null,
@@ -188,60 +190,104 @@ const App: React.FC = () => {
     useEffect(() => {
         if (!isAuthenticated || !token) return;
 
-        const ws = new WebSocket(`${CONFIG.WS_URL}/ws/logs`);
+        let ws: WebSocket | null = null;
+        let reconnectAttempts = 0;
 
-        ws.onopen = () => {
-            console.log('WebSocket connected to /ws/logs');
-            setConnectionStatus('connected');
-        };
+        const connectWebSocket = () => {
+            ws = new WebSocket(`${CONFIG.WS_URL}/ws/logs?token=${token}`);
 
-        ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                console.log('WebSocket message:', data);
+            ws.onopen = () => {
+                console.log('WebSocket connected to /ws/logs');
+                setConnectionStatus('connected');
+                reconnectAttempts = 0;
+            };
 
-                // Add to logs
-                if (data.worker_id && data.message && data.level) {
+            ws.onmessage = (event) => {
+                console.log('WebSocket raw message:', event.data);
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('WebSocket parsed message:', data);
+
+                    // Handle WorkerLog messages
+                    if (data.worker_id && data.message && data.level) {
+                        setLogs((prev) => [
+                            ...prev,
+                            {
+                                level: data.level,
+                                message: `${data.worker_id.substring(0, 8)}...: ${data.message}`,
+                                timestamp: new Date().toLocaleString(),
+                            },
+                        ].slice(-CONFIG.MAX_LOG_ENTRIES));
+
+                        // Update worker status for heartbeats or task activity
+                        if (data.message.includes('completed') || data.message.includes('Heartbeat')) {
+                            const workerId = data.worker_id;
+                            console.log(`Heartbeat received for worker ${workerId.substring(0, 8)}...`);
+                            setWorkerLastHeartbeat((prev) => ({
+                                ...prev,
+                                [workerId]: Date.now(),
+                            }));
+                            setWorkers((prev) =>
+                                prev.map((w) =>
+                                    w.id === workerId ? { ...w, is_active: true } : w
+                                )
+                            );
+                        }
+                    } else if (data.type === 'ping') {
+                        ws?.send(JSON.stringify({ type: 'pong' }));
+                    }
+                } catch (error) {
+                    console.error('WebSocket message parse error:', error, 'Raw message:', event.data);
                     setLogs((prev) => [
                         ...prev,
                         {
-                            level: data.level,
-                            message: `${data.worker_id.substring(0, 8)}...: ${data.message}`,
+                            level: 'warning',
+                            message: `Invalid WebSocket message: ${event.data}`,
                             timestamp: new Date().toLocaleString(),
                         },
                     ].slice(-CONFIG.MAX_LOG_ENTRIES));
-
-                    // Update worker status based on heartbeat or activity
-                    if (data.message.includes('completed') || data.message.includes('Heartbeat')) {
-                        const workerId = data.worker_id;
-                        setWorkerLastHeartbeat((prev) => ({
-                            ...prev,
-                            [workerId]: Date.now(),
-                        }));
-                        setWorkers((prev) =>
-                            prev.map((w) =>
-                                w.id === workerId ? { ...w, is_active: true } : w
-                            )
-                        );
-                    }
                 }
-            } catch (error) {
-                console.error('WebSocket message parse error:', error);
-            }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                setConnectionStatus('disconnected');
+                setLogs((prev) => [
+                    ...prev,
+                    {
+                        level: 'error',
+                        message: `WebSocket error: ${JSON.stringify(error)}`,
+                        timestamp: new Date().toLocaleString(),
+                    },
+                ].slice(-CONFIG.MAX_LOG_ENTRIES));
+            };
+
+            ws.onclose = (event) => {
+                console.log('WebSocket disconnected:', event.code, event.reason);
+                setConnectionStatus('disconnected');
+                if (reconnectAttempts < CONFIG.WS_MAX_RECONNECT_ATTEMPTS) {
+                    const delay = Math.min(CONFIG.WS_RECONNECT_INTERVAL * Math.pow(2, reconnectAttempts), 30000);
+                    console.log(`Reconnecting WebSocket in ${delay/1000}s... Attempt ${reconnectAttempts + 1}`);
+                    setTimeout(connectWebSocket, delay);
+                    reconnectAttempts++;
+                } else {
+                    console.error('Max WebSocket reconnect attempts reached');
+                    setLogs((prev) => [
+                        ...prev,
+                        {
+                            level: 'error',
+                            message: 'Failed to reconnect WebSocket after max attempts',
+                            timestamp: new Date().toLocaleString(),
+                        },
+                    ].slice(-CONFIG.MAX_LOG_ENTRIES));
+                }
+            };
         };
 
-        ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-            setConnectionStatus('disconnected');
-        };
-
-        ws.onclose = () => {
-            console.log('WebSocket disconnected');
-            setConnectionStatus('disconnected');
-        };
+        connectWebSocket();
 
         return () => {
-            ws.close();
+            ws?.close();
         };
     }, [isAuthenticated, token]);
 
@@ -333,16 +379,20 @@ const App: React.FC = () => {
         const interval = setInterval(() => {
             const now = Date.now();
             setWorkers((prev) =>
-                prev.map((worker) => ({
-                    ...worker,
-                    is_active: workerLastHeartbeat[worker.id] && (now - workerLastHeartbeat[worker.id] < CONFIG.HEARTBEAT_TIMEOUT) ? true : false,
-                }))
+                prev.map((worker) => {
+                    const isActive = workerLastHeartbeat[worker.id] && (now - workerLastHeartbeat[worker.id] < CONFIG.HEARTBEAT_TIMEOUT);
+                    console.log(`Worker ${worker.id.substring(0, 8)}... is_active: ${isActive}, Last heartbeat: ${workerLastHeartbeat[worker.id] || 'none'}`);
+                    return {
+                        ...worker,
+                        is_active: isActive ? true : false,
+                    };
+                })
             );
             setStats((prev) => ({
                 ...prev,
                 activeWorkers: workers.filter((w) => workerLastHeartbeat[w.id] && (now - workerLastHeartbeat[w.id] < CONFIG.HEARTBEAT_TIMEOUT)).length,
             }));
-        }, CONFIG.HEARTBEAT_TIMEOUT / 2); // Check every half timeout period
+        }, CONFIG.HEARTBEAT_TIMEOUT / 2);
         return () => clearInterval(interval);
     }, [workerLastHeartbeat, workers]);
 
@@ -584,7 +634,7 @@ const App: React.FC = () => {
                                 />
                             )}
                             {activeSection === 'workers' && (
-                                <WorkersSection workers={workers} showWorkerDetails={showWorkerDetails} removeWorker={removeWorker} />
+                                <WorkersSection workers={workers} showWorkerDetails={showWorkerDetails} removeWorker={removeWorker} token={token} />
                             )}
                             {activeSection === 'workflow' && <WorkflowSection masternode={masternode} workers={workers} />
                             }

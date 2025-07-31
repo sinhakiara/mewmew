@@ -54,33 +54,7 @@ const TasksSection: React.FC<TasksSectionProps> = ({ tasks, submitTask, showTask
             </div>
             <div className="bg-white rounded-lg shadow overflow-hidden">
                 <h3 className="text-sm font-medium text-gray-500 p-4">Task List</h3>
-                <table className="w-full">
-                    <thead>
-                        <tr className="bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">
-                            <th className="p-3">Task ID</th>
-                            <th className="p-3">Command</th>
-                            <th className="p-3">Status</th>
-                            <th className="p-3">Created At</th>
-			    <th className="p-3">Worker ID</th> {/* Added Worker ID column */}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {tasks.map((task) => (
-                            <tr
-                                key={task.task_id}
-                                className="border-t text-sm hover:bg-gray-50 cursor-pointer"
-                                onClick={() => showTaskDetails(task.task_id)}
-                            >
-                                <td className="p-3 font-mono">{task.task_id.substring(0, 8)}...</td>
-                                <td className="p-3 font-mono">{task.command.substring(0, 20)}...</td>
-                                <td className={`p-3 task-status-${task.status}`}>{task.status}</td>
-                                <td className="p-3">{new Date(task.created_at).toLocaleString()}</td>
-				<td className="p-3 font-mono">{task.worker_id ? task.worker_id.substring(0, 12) + '...' : 'Not assigned'}</td> {/* Display worker_id */}
-				{/*<td className="p-3 font-mono">{task.worker_id ? task.worker_id.substring(0, 8) + '...' : 'Not assigned'}</td>*/} {/* Display worker_id */}
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+                <table className="w-full"><thead><tr className="bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase"><th className="p-3">Task ID</th><th className="p-3">Command</th><th className="p-3">Status</th><th className="p-3">Created At</th><th className="p-3">Worker ID</th></tr></thead><tbody>{tasks.map((task) => (<tr key={task.task_id} className="border-t text-sm hover:bg-gray-50 cursor-pointer" onClick={() => showTaskDetails(task.task_id)}><td className="p-3 font-mono">{task.task_id.substring(0, 8)}...</td><td className="p-3 font-mono">{task.command.substring(0, 20)}...</td><td className={`p-3 task-status-${task.status}`}>{task.status}</td><td className="p-3">{new Date(task.created_at).toLocaleString()}</td><td className="p-3 font-mono">{task.worker_id ? task.worker_id.substring(0, 12) + '...' : 'Not assigned'}</td></tr>))}</tbody></table>
             </div>
         </div>
     );
