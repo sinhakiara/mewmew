@@ -1,8 +1,10 @@
-import React from 'react';
+//import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Workflow, Node } from './WorkflowEditor';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Eye } from 'lucide-react';
 
 interface LogEntry {
   id: string;
@@ -18,6 +20,8 @@ interface ExecutionPanelProps {
   selectedNode: string | null;
   onUpdateNodeConfig: (nodeId: string, config: Record<string, any>) => void;
   onClearLogs: () => void;
+  onViewNodeOutput?: (nodeId: string) => void;
+  taskPolling?: any;
 }
 
 export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
@@ -25,9 +29,22 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
   logs,
   selectedNode,
   onUpdateNodeConfig,
-  onClearLogs
+  onClearLogs,
+  onViewNodeOutput,
+  taskPolling
 }) => {
   const selectedNodeData = selectedNode ? workflow.nodes.find(n => n.id === selectedNode) : null;
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to latest log
+  useEffect(() => {
+    if (scrollAreaRef.current && logs.length > 0) {
+      const scrollElement = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+      if (scrollElement) {
+        scrollElement.scrollTop = scrollElement.scrollHeight;
+      }
+    }
+  }, [logs]);
 
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
@@ -36,6 +53,20 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
       case 'failed': return 'destructive';
       case 'pending': return 'outline';
       default: return 'outline';
+    }
+  };
+
+  const getNodeStatusIcon = (status: string) => {
+    switch (status) {
+      case 'running':
+      case 'pending':
+        return '🔄';
+      case 'success':
+        return '✅';
+      case 'failed':
+        return '❌';
+      default:
+        return '⚪';
     }
   };
 
@@ -74,10 +105,29 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
         <div className="space-y-2">
           {workflow.nodes.map(node => (
             <div key={node.id} className="flex items-center justify-between text-sm">
-              <span className="truncate">{node.title}</span>
+	    {/*<span className="truncate">{node.title}</span>
               <Badge variant={getStatusBadgeVariant(node.status)} className="text-xs">
                 {node.status}
-              </Badge>
+              </Badge> */}
+	     <div className="flex items-center gap-2">
+                <span className="text-sm">{getNodeStatusIcon(node.status)}</span>
+                <span className="truncate">{node.title}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {node.outputs && onViewNodeOutput && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onViewNodeOutput(node.id)}
+                    className="h-6 w-6 p-0"
+                  >
+                    <Eye className="w-3 h-3" />
+                  </Button>
+                )}
+                <Badge variant={getStatusBadgeVariant(node.status)} className="text-xs">
+                  {node.status}
+                </Badge>
+              </div>
             </div>
           ))}
         </div>
@@ -110,7 +160,7 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
       <div className="execution-header">
         Real-time Logs
       </div>
-      <ScrollArea className="execution-logs h-64">
+      {/* <ScrollArea className="execution-logs h-64">
         {logs.length === 0 ? (
           <div className="text-center text-muted-foreground py-8">
             No logs yet. Execute a workflow to see real-time updates.
@@ -133,7 +183,38 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
             ))}
           </div>
         )}
-      </ScrollArea>
+      </ScrollArea> */}
+     <div className="relative">
+        <ScrollArea ref={scrollAreaRef} className="execution-logs h-64">
+          {logs.length === 0 ? (
+            <div className="text-center text-muted-foreground py-8">
+              No logs yet. Execute a workflow to see real-time updates.
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {logs.slice(-50).map(log => (
+                <div key={log.id} className={`log-entry ${log.level}`}>
+                  <div className="flex items-start gap-2">
+                    <span className="text-xs">{getLogIcon(log.level)}</span>
+                    <div className="flex-1">
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(log.timestamp).toLocaleTimeString()}
+                        {log.workerId && ` • Worker: ${log.workerId.slice(0, 8)}`}
+                      </div>
+                      <div className="text-sm">{log.message}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </ScrollArea>
+        {logs.length > 0 && (
+          <div className="auto-scroll-indicator visible">
+            Auto-scroll enabled
+          </div>
+        )}
+      </div>
 
       {/* Actions */}
       <div className="p-4 border-t border-border">

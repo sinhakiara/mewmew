@@ -51,7 +51,8 @@ export const WorkflowNode: React.FC<WorkflowNodeProps> = ({
   return (
     <>
       <div
-        className={`workflow-node ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''}`}
+        //className={`workflow-node ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''}`}
+	className={`workflow-node ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${node.status === 'running' ? 'node-running' : ''}`}
         style={{
           left: node.position.x,
           top: node.position.y

@@ -19,6 +19,7 @@ interface WorkflowCanvasProps {
   setDragOffset: (offset: { x: number; y: number }) => void;
   canvasOffset: { x: number; y: number };
   setCanvasOffset: (offset: { x: number; y: number }) => void;
+  executingConnections?: Set<string>;
 }
 
 export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
@@ -36,7 +37,8 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   dragOffset,
   setDragOffset,
   canvasOffset,
-  setCanvasOffset
+  setCanvasOffset,
+  executingConnections = new Set()
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [connectionStart, setConnectionStart] = useState<{ nodeId: string; handle: string } | null>(null);
@@ -229,6 +231,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
         isConnecting={isConnecting}
         mousePosition={mousePosition}
         onRemoveConnection={onRemoveConnection}
+	executingConnections={executingConnections}
       />
 
       {/* Nodes */}

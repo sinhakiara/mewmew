@@ -352,9 +352,29 @@
   position: absolute;
   left: 20px;
   top: 0;
-  width: 100%;
+  width: 200px;
   height: 80px;
   z-index: 99;
+}
+
+.toolbar-trigger::after {
+  content: '⚙️ Hover for tools';
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted));
+  padding: 4px 8px;
+  border-radius: 4px;
+  opacity: 0.7;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.toolbar-trigger:hover::after {
+  opacity: 0;
 }
 
 /* Node Palette */
@@ -392,6 +412,28 @@
   width: 50px;
   height: calc(100vh - 140px);
   z-index: 99;
+}
+
+.palette-trigger::after {
+  content: '📦 Hover for nodes';
+  position: absolute;
+  top: 50%;
+  left: 5px;
+  transform: translateY(-50%) rotate(-90deg);
+  transform-origin: center;
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted));
+  padding: 3px 6px;
+  border-radius: 4px;
+  opacity: 0.7;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  white-space: nowrap;
+}
+
+.palette-trigger:hover::after {
+  opacity: 0;
 }
 
 .palette-section {
@@ -439,6 +481,49 @@
   z-index: 100;
   max-height: calc(100vh - 40px);
   overflow-y: auto;
+  opacity: 0;
+  transform: translateX(100%);
+  transition: all 0.3s ease;
+  pointer-events: none;
+}
+
+.execution-panel:hover,
+.execution-panel.panel-hover {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: all;
+}
+
+/* Hover trigger area for execution panel */
+.execution-trigger {
+  position: absolute;
+  right: 0;
+  top: 20px;
+  width: 50px;
+  height: calc(100vh - 40px);
+  z-index: 99;
+}
+
+.execution-trigger::after {
+  content: '📊 Hover for panel';
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  transform: translateY(-50%) rotate(90deg);
+  transform-origin: center;
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted));
+  padding: 3px 6px;
+  border-radius: 4px;
+  opacity: 0.7;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  white-space: nowrap;
+}
+
+.execution-trigger:hover::after {
+  opacity: 0;
 }
 
 .execution-header {
@@ -481,4 +566,39 @@
 .connection-path.executing {
   stroke-dasharray: 5, 5;
   animation: flow 1s linear infinite;
+}
+
+
+/* Node running state */
+.workflow-node.node-running {
+  border-color: hsl(var(--status-success));
+  background: linear-gradient(45deg, hsl(var(--node-bg)), hsl(var(--status-success) / 0.1));
+  animation: nodeRunning 2s ease-in-out infinite;
+}
+
+@keyframes nodeRunning {
+  0%, 100% {
+    box-shadow: 0 0 5px hsl(var(--status-success) / 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px hsl(var(--status-success) / 0.6);
+  }
+}
+
+/* Auto-scroll indicator */
+.auto-scroll-indicator {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.auto-scroll-indicator.visible {
+  opacity: 1;
 }

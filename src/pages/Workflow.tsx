@@ -29,8 +29,8 @@ const Workflow = () => {
       </div>
       <WorkflowEditor
         authToken={localStorage.getItem('dheeraj_token') || ''}
-        apiBaseUrl={window.location.hostname === 'localhost' ? 'http://localhost:5000' : 'https://192.168.29.20:8000'}
-        wsUrl={`${window.location.hostname === 'localhost' ? 'ws://localhost:5000' : 'wss://192.168.29.20:8000'}/ws/logs?token=${localStorage.getItem('dheeraj_token') || ''}`}
+        apiBaseUrl={window.location.hostname === 'localhost' ? 'http://localhost:8000' : 'https://192.168.29.20:8000'}
+        wsUrl={`${window.location.hostname === 'localhost' ? 'ws://localhost:80000' : 'wss://192.168.29.20:8000'}/ws/logs?token=${localStorage.getItem('dheeraj_token') || ''}`}
         connectionStatus="connected"
       />
     </div>

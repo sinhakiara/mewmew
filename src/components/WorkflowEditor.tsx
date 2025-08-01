@@ -3,8 +3,14 @@ import { WorkflowCanvas } from './WorkflowCanvas';
 import { NodePalette } from './NodePalette';
 import { WorkflowToolbar } from './WorkflowToolbar';
 import { ExecutionPanel } from './ExecutionPanel';
+import { NodeOutputModal } from './NodeOutputModal';
+import { NodeRemovalDialog } from './NodeRemovalDialog';
 import { useWorkflowEngine } from '../hooks/useWorkflowEngine';
 import { useWebSocket } from '../hooks/useWebSocket';
+import { useTaskPolling } from '../hooks/useTaskPolling';
+import { useWorkflowFileManager } from './WorkflowFileManager';
+
+
 
 export interface Node {
   id: string;
@@ -59,12 +65,20 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
+  const [executingConnections, setExecutingConnections] = useState<Set<string>>(new Set());
+  const [nodeToRemove, setNodeToRemove] = useState<string | null>(null);
+  const [outputModalNode, setOutputModalNode] = useState<string | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   //const workflowEngine = useWorkflowEngine();
   //const { logs, connectionStatus, clearLogs } = useWebSocket('ws://192.168.29.20:8000/ws/logs');
   const workflowEngine = useWorkflowEngine({ apiBaseUrl, authToken });
   const { logs, connectionStatus, clearLogs } = useWebSocket(wsUrl);
+  const taskPolling = useTaskPolling({ apiBaseUrl, authToken });
+  const { saveWorkflowToFile, loadWorkflowFromFile, fileInput } = useWorkflowFileManager({
+    onSave: () => {},
+    onLoad: (newWorkflow) => setWorkflow(newWorkflow)
+  });
 
   // Add node to workflow
   const addNode = useCallback((nodeType: string, position: { x: number; y: number }) => {
@@ -166,29 +180,38 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
     }));
   }, []);
 
-    // Remove node
+  // Remove node with confirmation dialog
   const removeNode = useCallback((nodeId: string) => {
-    setWorkflow(prev => ({
+    setNodeToRemove(nodeId);
+  }, []);
+
+  const confirmRemoveNode = useCallback(() => {
+    if (!nodeToRemove) return;
+    
+    setWorkflow(prev => ({	    
       ...prev,
-      nodes: prev.nodes.filter(node => node.id !== nodeId),
+      nodes: prev.nodes.filter(node => node.id !== nodeToRemove),
       connections: prev.connections.filter(conn =>
-        conn.source !== nodeId && conn.target !== nodeId
+	conn.source !== nodeToRemove && conn.target !== nodeToRemove
       )
     }));
 
     // Clear selection if the removed node was selected
-    if (selectedNode === nodeId) {
+   if (selectedNode === nodeToRemove) {	    
       setSelectedNode(null);
     }
-  }, [selectedNode]);
+    setNodeToRemove(null);
+  }, [nodeToRemove, selectedNode]);
 
-  // Execute workflow
+  // Execute workflow with visual updates
   const executeWorkflow = useCallback(async () => {
     if (workflow.nodes.length === 0) return;
 
     setWorkflow(prev => ({ ...prev, status: 'running' }));
     
     try {
+// --------------------------	    
+	    {/* 
       await workflowEngine.execute(workflow);
     } catch (error) {
       console.error('Workflow execution failed:', error);
@@ -198,20 +221,6 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
 
   // Save workflow
   const saveWorkflow = useCallback(() => {
-  //  localStorage.setItem(`workflow-${workflow.id}`, JSON.stringify(workflow));
-  //}, [workflow]);
-  
-
-  // Load workflow
-  //const loadWorkflow = useCallback((workflowId: string) => {
-   // const saved = localStorage.getItem(`workflow-${workflowId}`);
-  //  if (saved) {
-  //    setWorkflow(JSON.parse(saved));
-  //  }
-  //}, []);
-
-  //return (
-  //  <div className="workflow-editor">
   try {
       const workflowData = {
         ...workflow,
@@ -270,6 +279,134 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
       alert('Failed to load workflow. Please try again.');
     }
   }, []);
+*/} //_______________
+  
+  // Get execution order
+      const executionOrder = getExecutionOrder(workflow);
+      
+      for (const nodeId of executionOrder) {
+        const node = workflow.nodes.find(n => n.id === nodeId);
+        if (!node) continue;
+
+        // Update node status to running
+        setWorkflow(prev => ({
+          ...prev,
+          nodes: prev.nodes.map(n => 
+            n.id === nodeId ? { ...n, status: 'running' } : n
+          )
+        }));
+
+        // Show connection animation
+        const inputConnection = workflow.connections.find(conn => conn.target === nodeId);
+        if (inputConnection) {
+          setExecutingConnections(prev => new Set(prev).add(inputConnection.id));
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Animation delay
+        }
+
+        try {
+          // Add task to polling
+          const taskId = `task-${nodeId}-${Date.now()}`;
+          taskPolling.addTask(taskId);
+
+          // Execute node (simplified - you'll need to integrate with actual execution)
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate execution
+
+          // Update node status to success
+          setWorkflow(prev => ({
+            ...prev,
+            nodes: prev.nodes.map(n => 
+              n.id === nodeId ? { ...n, status: 'success', outputs: { data: `Output from ${n.title}` } } : n
+            )
+          }));
+
+        } catch (error) {
+          setWorkflow(prev => ({
+            ...prev,
+            nodes: prev.nodes.map(n => 
+              n.id === nodeId ? { ...n, status: 'failed' } : n
+            )
+          }));
+        }
+
+        // Clear connection animation
+        if (inputConnection) {
+          setExecutingConnections(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(inputConnection.id);
+            return newSet;
+          });
+        }
+      }
+
+      setWorkflow(prev => ({ ...prev, status: 'completed' }));
+    } catch (error) {
+      console.error('Workflow execution failed:', error);
+      setWorkflow(prev => ({ ...prev, status: 'failed' }));
+    }
+  }, [workflow, taskPolling]);
+
+  // Get execution order based on connections
+  const getExecutionOrder = (workflow: Workflow): string[] => {
+    const visited = new Set<string>();
+    const order: string[] = [];
+    
+    const visit = (nodeId: string) => {
+      if (visited.has(nodeId)) return;
+      visited.add(nodeId);
+      
+      // Visit dependencies first
+      const dependencies = workflow.connections
+        .filter(conn => conn.target === nodeId)
+        .map(conn => conn.source);
+      
+      dependencies.forEach(visit);
+      order.push(nodeId);
+    };
+    
+    // Start with nodes that have no dependencies
+    const rootNodes = workflow.nodes
+      .filter(node => !workflow.connections.some(conn => conn.target === node.id))
+      .map(node => node.id);
+    
+    rootNodes.forEach(visit);
+    
+    // Add any remaining nodes
+    workflow.nodes.forEach(node => visit(node.id));
+    
+    return order;
+  };
+
+  // Save workflow as file download
+  const saveWorkflow = useCallback(() => {
+    saveWorkflowToFile(workflow);
+  }, [workflow, saveWorkflowToFile]);
+
+  // Load workflow from file upload
+  const loadWorkflow = useCallback(() => {
+    loadWorkflowFromFile();
+  }, [loadWorkflowFromFile]);
+
+  // View node output
+  const viewNodeOutput = useCallback((nodeId: string) => {
+    setOutputModalNode(nodeId);
+  }, []);
+
+  // Update node status based on task polling
+  useEffect(() => {
+    workflow.nodes.forEach(node => {
+      if (node.status === 'running') {
+        const taskStatus = taskPolling.getTaskStatus(`task-${node.id}`);
+        if (taskStatus) {
+          setWorkflow(prev => ({
+            ...prev,
+            nodes: prev.nodes.map(n => 
+              n.id === node.id ? { ...n, status: taskStatus.status === 'completed' ? 'success' : taskStatus.status } : n
+            )
+          }));
+        }
+      }
+    });
+  }, [taskPolling.activeTasks, workflow.nodes]);
 
   return (
     <div className="workflow-editor">
@@ -283,6 +420,11 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
         className="palette-trigger"
         onMouseEnter={() => document.querySelector('.node-palette')?.classList.add('palette-hover')}
         onMouseLeave={() => document.querySelector('.node-palette')?.classList.remove('palette-hover')}
+      />
+      <div
+        className="execution-trigger"
+        onMouseEnter={() => document.querySelector('.execution-panel')?.classList.add('panel-hover')}
+        onMouseLeave={() => document.querySelector('.execution-panel')?.classList.remove('panel-hover')}
       />
 
       <WorkflowToolbar
@@ -311,6 +453,7 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
         setDragOffset={setDragOffset}
         canvasOffset={canvasOffset}
         setCanvasOffset={setCanvasOffset}
+	executingConnections={executingConnections}
       />
       
       <ExecutionPanel
@@ -319,6 +462,27 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
         selectedNode={selectedNode}
         onUpdateNodeConfig={updateNodeConfig}
         onClearLogs={clearLogs}
+	onViewNodeOutput={viewNodeOutput}
+        taskPolling={taskPolling}
+      />
+
+      {/* Hidden file input for workflow loading */}
+      {fileInput}
+
+      {/* Node removal confirmation dialog */}
+      <NodeRemovalDialog
+        open={nodeToRemove !== null}
+        onOpenChange={(open) => !open && setNodeToRemove(null)}
+        nodeTitle={nodeToRemove ? workflow.nodes.find(n => n.id === nodeToRemove)?.title || '' : ''}
+        onConfirm={confirmRemoveNode}
+      />
+
+      {/* Node output modal */}
+      <NodeOutputModal
+        open={outputModalNode !== null}
+        onOpenChange={(open) => !open && setOutputModalNode(null)}
+        nodeTitle={outputModalNode ? workflow.nodes.find(n => n.id === outputModalNode)?.title || '' : ''}
+        nodeOutputs={outputModalNode ? workflow.nodes.find(n => n.id === outputModalNode)?.outputs : undefined}
       />
     </div>
   );

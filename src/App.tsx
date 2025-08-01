@@ -58,8 +58,8 @@ interface ConfirmationModalProps {
 }
 
 const CONFIG = {
-    BASE_URL: window.location.hostname === 'localhost' ? 'http://localhost:5000' : 'https://192.168.29.20:8000',
-    WS_URL: window.location.hostname === 'localhost' ? 'ws://localhost:5000' : 'wss://192.168.29.20:8000',
+    BASE_URL: window.location.hostname === 'localhost' ? 'http://localhost:8000' : 'https://192.168.29.20:8000',
+    WS_URL: window.location.hostname === 'localhost' ? 'ws://localhost:8000' : 'wss://192.168.29.20:8000',
     REFRESH_INTERVAL: 2000,
     MAX_LOG_ENTRIES: 100,
     TOKEN_KEY: 'dheeraj_token',

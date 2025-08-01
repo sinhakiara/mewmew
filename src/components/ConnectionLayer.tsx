@@ -8,6 +8,7 @@ interface ConnectionLayerProps {
   isConnecting: boolean;
   mousePosition: { x: number; y: number };
   onRemoveConnection: (connectionId: string) => void;
+  executingConnections?: Set<string>;
 }
 
 export const ConnectionLayer: React.FC<ConnectionLayerProps> = ({
@@ -16,7 +17,8 @@ export const ConnectionLayer: React.FC<ConnectionLayerProps> = ({
   connectionStart,
   isConnecting,
   mousePosition,
-  onRemoveConnection
+  onRemoveConnection,
+  executingConnections = new Set()
 }) => {
   const getNodeCenter = (nodeId: string): { x: number; y: number } => {
     const node = nodes.find(n => n.id === nodeId);
