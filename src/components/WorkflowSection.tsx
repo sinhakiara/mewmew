@@ -1,82 +1,76 @@
-import React, { useEffect, useRef } from 'react';
-import { jsPlumbInstance } from 'jsplumb';
-
 interface Worker {
-    id: string;
-    is_active: boolean;
-    worker_nodename?: string;
+  id: string;
+  is_active: boolean;
+  worker_nodename?: string;
+  worker_os?: string;
+  worker_arch?: string;
+  worker_kernel?: string;
+  worker_publicip?: string;
+  registered_at?: string;
 }
 
 interface WorkflowSectionProps {
-    masternode: any;
-    workers: Worker[];
+  masternode: any;
+  workers: Worker[];
 }
 
 const WorkflowSection: React.FC<WorkflowSectionProps> = ({ masternode, workers }) => {
-    const containerRef = useRef<HTMLDivElement | null>(null);
-    const jsPlumbRef = useRef<jsPlumbInstance | null>(null);
-
-    useEffect(() => {
-        if (containerRef.current) {
-            jsPlumbRef.current = jsPlumb.getInstance({
-                Container: containerRef.current,
-                Connector: ['Bezier', { curviness: 50 }],
-                Endpoint: ['Dot', { radius: 5 }],
-                PaintStyle: { stroke: '#6366f1', strokeWidth: 2 },
-                HoverPaintStyle: { stroke: '#4b5563', strokeWidth: 3 },
-            });
-
-            const jsPlumbInstance = jsPlumbRef.current;
-
-            if (masternode) {
-                workers.forEach((worker) => {
-                    if (worker.is_active) {
-                        jsPlumbInstance.connect({
-                            source: 'masternode',
-                            target: `worker-${worker.id}`,
-                            anchors: ['Bottom', 'Top'],
-                            overlays: [
-                                ['Arrow', { width: 10, length: 10, location: 1 }],
-                            ],
-                        });
-                    }
-                });
-            }
-
-            return () => {
-                jsPlumbInstance.reset();
-            };
-        }
-    }, [masternode, workers]);
-
-    return (
-        <div className="p-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Workflow</h2>
-            <div ref={containerRef} className="relative min-h-[400px] bg-white rounded-lg shadow p-4">
-                {masternode && (
-                    <div
-                        id="masternode"
-                        className="absolute top-10 left-1/2 transform -translate-x-1/2 p-4 bg-indigo-100 rounded-lg shadow"
-                    >
-                        <h3 className="text-sm font-medium text-indigo-600">Masternode</h3>
-                        <p className="text-xs">{masternode.masternode_nodename || 'Masternode'}</p>
-                    </div>
-                )}
-                {workers.map((worker, index) => (
-                    <div
-                        key={worker.id}
-                        id={`worker-${worker.id}`}
-                        className={`absolute bottom-10 left-${index + 1}/${
-                            workers.length + 1
-                        } p-4 bg-white rounded-lg shadow ${worker.is_active ? 'border-green-500' : 'border-red-500'} border-2`}
-                    >
-                        <h3 className="text-sm font-medium text-gray-600">{worker.worker_nodename || worker.id}</h3>
-                        <p className="text-xs">{worker.is_active ? 'Active' : 'Inactive'}</p>
-                    </div>
-                ))}
-            </div>
+  return (
+    <div className="p-6 space-y-6">
+      <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Workflow Overview</h2>
+      
+      {/* Master Node Info */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+          <Server className="w-5 h-5" />
+          Master Node
+        </h3>
+        {masternode ? (
+          <div className="space-y-2 text-sm">
+            <p><span className="font-medium">Node Name:</span> {masternode.masternode_nodename}</p>
+            <p><span className="font-medium">OS:</span> {masternode.masternode_os}</p>
+            <p><span className="font-medium">Architecture:</span> {masternode.masternode_arch}</p>
+            <p><span className="font-medium">Kernel:</span> {masternode.masternode_kernel}</p>
+            <p><span className="font-medium">Public IP:</span> {masternode.masternode_publicip}</p>
+          </div>
+        ) : (
+          <p className="text-gray-500 dark:text-gray-400">Master node information not available</p>
+        )}
+      </div>
+      
+      {/* Workers Overview */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+          <Users className="w-5 h-5" />
+          Workers Overview
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+            <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Total Workers</p>
+            <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">{workers.length}</p>
+          </div>
+          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
+            <p className="text-sm font-medium text-green-600 dark:text-green-400">Active Workers</p>
+            <p className="text-2xl font-bold text-green-900 dark:text-green-100">
+              {workers.filter(w => w.is_active).length}
+            </p>
+          </div>
+          <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4">
+            <p className="text-sm font-medium text-red-600 dark:text-red-400">Inactive Workers</p>
+            <p className="text-2xl font-bold text-red-900 dark:text-red-100">
+              {workers.filter(w => !w.is_active).length}
+            </p>
+          </div>
         </div>
-    );
+      </div>
+      
+      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+        <p className="text-sm text-blue-800 dark:text-blue-200">
+          💡 <strong>Tip:</strong> Use the new "Visual Workflow" section to create and execute automated security workflows with a drag-and-drop interface.
+        </p>
+      </div>
+    </div>
+  );
 };
 
 export default WorkflowSection;

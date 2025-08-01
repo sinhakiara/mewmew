@@ -14,6 +14,8 @@ import WorkerDetailsModal from './components/WorkerDetailsModal';
 import AiSuggestModal from './components/AiSuggestModal';
 import ConfirmationModal from './components/ConfirmationModal';
 
+import VisualWorkflowSection from './components/VisualWorkflowSection';
+
 interface Task {
     task_id: string;
     command: string;
@@ -512,6 +514,12 @@ const App: React.FC = () => {
         }
     };
 
+
+
+
+
+
+
     const removeWorker = (workerId: string, workerName: string) => {
         setConfirmationModal({
             isOpen: true,
@@ -638,6 +646,7 @@ const App: React.FC = () => {
                             )}
                             {activeSection === 'workflow' && <WorkflowSection masternode={masternode} workers={workers} />
                             }
+			    {activeSection === 'visual-workflow' && <VisualWorkflowSection connectionStatus={connectionStatus} />}
                             {activeSection === 'logs' && <LogsSection logs={logs} exportLogs={exportLogs} clearLogs={clearLogs} />}
                             {activeSection === 'apiDocs' && <ApiDocsSection />}
                         </main>
