@@ -11,6 +11,7 @@ interface WorkflowCanvasProps {
   onUpdateNodeConfig: (nodeId: string, config: Record<string, any>) => void;
   onAddConnection: (source: string, target: string) => void;
   onRemoveConnection: (connectionId: string) => void;
+  onRemoveNode: (nodeId: string) => void;
   onAddNode: (nodeType: string, position: { x: number; y: number }) => void;
   isDragging: boolean;
   setIsDragging: (dragging: boolean) => void;
@@ -28,6 +29,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   onUpdateNodeConfig,
   onAddConnection,
   onRemoveConnection,
+  onRemoveNode,
   onAddNode,
   isDragging,
   setIsDragging,
@@ -240,6 +242,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           onConnectionStart={handleConnectionStart}
           onConnectionEnd={handleConnectionEnd}
           onConfigChange={onUpdateNodeConfig}
+	  onRemove={onRemoveNode}
         />
       ))}
 

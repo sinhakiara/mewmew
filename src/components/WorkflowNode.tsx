@@ -9,6 +9,7 @@ interface WorkflowNodeProps {
   onConnectionStart: (nodeId: string, handle: string, event: React.MouseEvent) => void;
   onConnectionEnd: (nodeId: string, handle: string) => void;
   onConfigChange: (nodeId: string, config: Record<string, any>) => void;
+  onRemove: (nodeId: string) => void;
 }
 
 export const WorkflowNode: React.FC<WorkflowNodeProps> = ({
@@ -18,7 +19,8 @@ export const WorkflowNode: React.FC<WorkflowNodeProps> = ({
   onDragStart,
   onConnectionStart,
   onConnectionEnd,
-  onConfigChange
+  onConfigChange,
+  onRemove
 }) => {
   const [isConfigOpen, setIsConfigOpen] = useState(false);
 
@@ -70,6 +72,19 @@ export const WorkflowNode: React.FC<WorkflowNodeProps> = ({
           </div>
           <div className="node-title">{node.title}</div>
           <div className={`node-status ${node.status}`} />
+	  {/* Remove button */}
+          <button
+            className="node-remove-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (confirm(`Remove ${node.title} node?`)) {
+                onRemove(node.id);
+              }
+            }}
+            title="Remove node"
+          >
+            ×
+          </button>
         </div>
 
         {/* Node Content */}

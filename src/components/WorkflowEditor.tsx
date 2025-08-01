@@ -33,7 +33,20 @@ export interface Workflow {
   status: 'idle' | 'running' | 'completed' | 'failed';
 }
 
-const WorkflowEditor: React.FC = () => {
+//const WorkflowEditor: React.FC = () => {
+interface WorkflowEditorProps {
+  authToken: string;
+  apiBaseUrl: string;
+  wsUrl: string;
+  connectionStatus: string;
+}
+
+const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ 
+  authToken, 
+  apiBaseUrl, 
+  wsUrl, 
+  connectionStatus: parentConnectionStatus 
+}) => {
   const [workflow, setWorkflow] = useState<Workflow>({
     id: 'workflow-1',
     name: 'Security Assessment',
@@ -48,8 +61,10 @@ const WorkflowEditor: React.FC = () => {
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  const workflowEngine = useWorkflowEngine();
-  const { logs, connectionStatus, clearLogs } = useWebSocket('ws://192.168.29.20:8000/ws/logs');
+  //const workflowEngine = useWorkflowEngine();
+  //const { logs, connectionStatus, clearLogs } = useWebSocket('ws://192.168.29.20:8000/ws/logs');
+  const workflowEngine = useWorkflowEngine({ apiBaseUrl, authToken });
+  const { logs, connectionStatus, clearLogs } = useWebSocket(wsUrl);
 
   // Add node to workflow
   const addNode = useCallback((nodeType: string, position: { x: number; y: number }) => {
@@ -151,6 +166,22 @@ const WorkflowEditor: React.FC = () => {
     }));
   }, []);
 
+    // Remove node
+  const removeNode = useCallback((nodeId: string) => {
+    setWorkflow(prev => ({
+      ...prev,
+      nodes: prev.nodes.filter(node => node.id !== nodeId),
+      connections: prev.connections.filter(conn =>
+        conn.source !== nodeId && conn.target !== nodeId
+      )
+    }));
+
+    // Clear selection if the removed node was selected
+    if (selectedNode === nodeId) {
+      setSelectedNode(null);
+    }
+  }, [selectedNode]);
+
   // Execute workflow
   const executeWorkflow = useCallback(async () => {
     if (workflow.nodes.length === 0) return;
@@ -167,19 +198,93 @@ const WorkflowEditor: React.FC = () => {
 
   // Save workflow
   const saveWorkflow = useCallback(() => {
-    localStorage.setItem(`workflow-${workflow.id}`, JSON.stringify(workflow));
+  //  localStorage.setItem(`workflow-${workflow.id}`, JSON.stringify(workflow));
+  //}, [workflow]);
+  
+
+  // Load workflow
+  //const loadWorkflow = useCallback((workflowId: string) => {
+   // const saved = localStorage.getItem(`workflow-${workflowId}`);
+  //  if (saved) {
+  //    setWorkflow(JSON.parse(saved));
+  //  }
+  //}, []);
+
+  //return (
+  //  <div className="workflow-editor">
+  try {
+      const workflowData = {
+        ...workflow,
+        savedAt: new Date().toISOString()
+      };
+      localStorage.setItem(`workflow-${workflow.id}`, JSON.stringify(workflowData));
+      alert('Workflow saved successfully!');
+    } catch (error) {
+      console.error('Failed to save workflow:', error);
+      alert('Failed to save workflow. Please try again.');
+    }
   }, [workflow]);
 
   // Load workflow
-  const loadWorkflow = useCallback((workflowId: string) => {
-    const saved = localStorage.getItem(`workflow-${workflowId}`);
-    if (saved) {
-      setWorkflow(JSON.parse(saved));
+  const loadWorkflow = useCallback(() => {
+    try {
+      const workflowList = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('workflow-')) {
+          const saved = localStorage.getItem(key);
+          if (saved) {
+            const workflowData = JSON.parse(saved);
+            workflowList.push({
+              id: workflowData.id,
+              name: workflowData.name,
+              savedAt: workflowData.savedAt || 'Unknown'
+            });
+          }
+        }
+      }
+      
+      if (workflowList.length === 0) {
+        alert('No saved workflows found.');
+        return;
+      }
+      
+      // Simple workflow selector - in a real app, you'd use a proper modal
+      const workflowName = prompt(`Available workflows:\n${workflowList.map((w, i) => `${i + 1}. ${w.name} (${new Date(w.savedAt).toLocaleString()})`).join('\n')}\n\nEnter the number of the workflow to load:`);
+      
+      if (workflowName) {
+        const index = parseInt(workflowName) - 1;
+        if (index >= 0 && index < workflowList.length) {
+          const selectedWorkflow = workflowList[index];
+          const saved = localStorage.getItem(`workflow-${selectedWorkflow.id}`);
+          if (saved) {
+            setWorkflow(JSON.parse(saved));
+            alert('Workflow loaded successfully!');
+          }
+        } else {
+          alert('Invalid selection.');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load workflow:', error);
+      alert('Failed to load workflow. Please try again.');
     }
   }, []);
 
   return (
     <div className="workflow-editor">
+      {/* Hover trigger areas */}
+      <div 
+        className="toolbar-trigger"
+        onMouseEnter={() => document.querySelector('.workflow-toolbar')?.classList.add('toolbar-hover')}
+        onMouseLeave={() => document.querySelector('.workflow-toolbar')?.classList.remove('toolbar-hover')}
+      />
+      <div 
+        className="palette-trigger"
+        onMouseEnter={() => document.querySelector('.node-palette')?.classList.add('palette-hover')}
+        onMouseLeave={() => document.querySelector('.node-palette')?.classList.remove('palette-hover')}
+      />
+
       <WorkflowToolbar
         workflow={workflow}
         onExecute={executeWorkflow}
@@ -198,6 +303,7 @@ const WorkflowEditor: React.FC = () => {
         onUpdateNodeConfig={updateNodeConfig}
         onAddConnection={addConnection}
         onRemoveConnection={removeConnection}
+	onRemoveNode={removeNode}
         onAddNode={addNode}
         isDragging={isDragging}
         setIsDragging={setIsDragging}
