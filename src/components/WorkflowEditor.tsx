@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { WorkflowCanvas } from './WorkflowCanvas';
 import { NodePalette } from './NodePalette';
@@ -47,11 +48,11 @@ interface WorkflowEditorProps {
   connectionStatus: string;
 }
 
-const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ 
-  authToken, 
-  apiBaseUrl, 
-  wsUrl, 
-  connectionStatus: parentConnectionStatus 
+const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
+  authToken,
+  apiBaseUrl,
+  wsUrl,
+  connectionStatus: parentConnectionStatus
 }) => {
   const [workflow, setWorkflow] = useState<Workflow>({
     id: 'workflow-1',
@@ -152,12 +153,12 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
   // Add connection between nodes
   const addConnection = useCallback((source: string, target: string) => {
     const connectionId = `${source}-${target}`;
-    
+
     // Check if connection already exists
-    const exists = workflow.connections.find(conn => 
+    const exists = workflow.connections.find(conn =>
       conn.source === source && conn.target === target
     );
-    
+
     if (exists) return;
 
     const newConnection: Connection = {
@@ -187,17 +188,17 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
 
   const confirmRemoveNode = useCallback(() => {
     if (!nodeToRemove) return;
-    
-    setWorkflow(prev => ({	    
+
+    setWorkflow(prev => ({
       ...prev,
       nodes: prev.nodes.filter(node => node.id !== nodeToRemove),
       connections: prev.connections.filter(conn =>
-	conn.source !== nodeToRemove && conn.target !== nodeToRemove
+        conn.source !== nodeToRemove && conn.target !== nodeToRemove
       )
     }));
 
     // Clear selection if the removed node was selected
-   if (selectedNode === nodeToRemove) {	    
+   if (selectedNode === nodeToRemove) {
       setSelectedNode(null);
     }
     setNodeToRemove(null);
@@ -208,10 +209,10 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
     if (workflow.nodes.length === 0) return;
 
     setWorkflow(prev => ({ ...prev, status: 'running' }));
-    
+
     try {
-// --------------------------	    
-	    {/* 
+// --------------------------
+            {/*
       await workflowEngine.execute(workflow);
     } catch (error) {
       console.error('Workflow execution failed:', error);
@@ -252,15 +253,15 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
           }
         }
       }
-      
+
       if (workflowList.length === 0) {
         alert('No saved workflows found.');
         return;
       }
-      
+
       // Simple workflow selector - in a real app, you'd use a proper modal
       const workflowName = prompt(`Available workflows:\n${workflowList.map((w, i) => `${i + 1}. ${w.name} (${new Date(w.savedAt).toLocaleString()})`).join('\n')}\n\nEnter the number of the workflow to load:`);
-      
+
       if (workflowName) {
         const index = parseInt(workflowName) - 1;
         if (index >= 0 && index < workflowList.length) {
@@ -280,10 +281,10 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
     }
   }, []);
 */} //_______________
-  
+
   // Get execution order
       const executionOrder = getExecutionOrder(workflow);
-      
+
       for (const nodeId of executionOrder) {
         const node = workflow.nodes.find(n => n.id === nodeId);
         if (!node) continue;
@@ -291,7 +292,7 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
         // Update node status to running
         setWorkflow(prev => ({
           ...prev,
-          nodes: prev.nodes.map(n => 
+          nodes: prev.nodes.map(n =>
             n.id === nodeId ? { ...n, status: 'running' } : n
           )
         }));
@@ -314,7 +315,7 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
           // Update node status to success
           setWorkflow(prev => ({
             ...prev,
-            nodes: prev.nodes.map(n => 
+            nodes: prev.nodes.map(n =>
               n.id === nodeId ? { ...n, status: 'success', outputs: { data: `Output from ${n.title}` } } : n
             )
           }));
@@ -322,7 +323,7 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
         } catch (error) {
           setWorkflow(prev => ({
             ...prev,
-            nodes: prev.nodes.map(n => 
+            nodes: prev.nodes.map(n =>
               n.id === nodeId ? { ...n, status: 'failed' } : n
             )
           }));
@@ -349,30 +350,30 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
   const getExecutionOrder = (workflow: Workflow): string[] => {
     const visited = new Set<string>();
     const order: string[] = [];
-    
+
     const visit = (nodeId: string) => {
       if (visited.has(nodeId)) return;
       visited.add(nodeId);
-      
+
       // Visit dependencies first
       const dependencies = workflow.connections
         .filter(conn => conn.target === nodeId)
         .map(conn => conn.source);
-      
+
       dependencies.forEach(visit);
       order.push(nodeId);
     };
-    
+
     // Start with nodes that have no dependencies
     const rootNodes = workflow.nodes
       .filter(node => !workflow.connections.some(conn => conn.target === node.id))
       .map(node => node.id);
-    
+
     rootNodes.forEach(visit);
-    
+
     // Add any remaining nodes
     workflow.nodes.forEach(node => visit(node.id));
-    
+
     return order;
   };
 
@@ -399,7 +400,7 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
         if (taskStatus) {
           setWorkflow(prev => ({
             ...prev,
-            nodes: prev.nodes.map(n => 
+            nodes: prev.nodes.map(n =>
               n.id === node.id ? { ...n, status: taskStatus.status === 'completed' ? 'success' : taskStatus.status } : n
             )
           }));
@@ -411,12 +412,12 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
   return (
     <div className="workflow-editor">
       {/* Hover trigger areas */}
-      <div 
+      <div
         className="toolbar-trigger"
         onMouseEnter={() => document.querySelector('.workflow-toolbar')?.classList.add('toolbar-hover')}
         onMouseLeave={() => document.querySelector('.workflow-toolbar')?.classList.remove('toolbar-hover')}
       />
-      <div 
+      <div
         className="palette-trigger"
         onMouseEnter={() => document.querySelector('.node-palette')?.classList.add('palette-hover')}
         onMouseLeave={() => document.querySelector('.node-palette')?.classList.remove('palette-hover')}
@@ -434,9 +435,11 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
         onLoad={loadWorkflow}
         connectionStatus={connectionStatus}
       />
-      
-      <NodePalette onAddNode={addNode} />
-      
+
+      {/*      <NodePalette onAddNode={addNode} />  */}
+       <NodePalette onAddNode={addNode} />
+       {/*  <NodePalette onAddNode={addNode} nodeRegistry={nodeRegistry} /> */}
+
       <WorkflowCanvas
         workflow={workflow}
         selectedNode={selectedNode}
@@ -445,7 +448,7 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
         onUpdateNodeConfig={updateNodeConfig}
         onAddConnection={addConnection}
         onRemoveConnection={removeConnection}
-	onRemoveNode={removeNode}
+        onRemoveNode={removeNode}
         onAddNode={addNode}
         isDragging={isDragging}
         setIsDragging={setIsDragging}
@@ -453,16 +456,16 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
         setDragOffset={setDragOffset}
         canvasOffset={canvasOffset}
         setCanvasOffset={setCanvasOffset}
-	executingConnections={executingConnections}
+        executingConnections={executingConnections}
       />
-      
+
       <ExecutionPanel
         workflow={workflow}
         logs={logs}
         selectedNode={selectedNode}
         onUpdateNodeConfig={updateNodeConfig}
         onClearLogs={clearLogs}
-	onViewNodeOutput={viewNodeOutput}
+        onViewNodeOutput={viewNodeOutput}
         taskPolling={taskPolling}
       />
 

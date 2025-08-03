@@ -64,17 +64,26 @@ export const useTaskPolling = (options: UseTaskPollingOptions) => {
 
     try {
       const taskIds = Array.from(activeTasks.keys());
-      const promises = taskIds.map(async (taskId) => {
+      {/*      const promises = taskIds.map(async (taskId) => {
         try {
           const status = await apiCall(`/tasks/${taskId}`);
           return { taskId, status };
         } catch (error) {
           console.error(`Failed to poll task ${taskId}:`, error);
-          return { taskId, status: { task_id: taskId, status: 'failed' as const, error: 'Failed to poll status' } };
+          return { taskId, status: { task_id: taskId, status: 'failed' as const, error: 'Failed to poll status' } };     */}
+	 const allTasks = await apiCall('/api/tasks');
+
+      const results = taskIds.map((taskId) => {
+        const task = allTasks.find((t: any) => t.task_id === taskId);
+        if (task) {
+          return { taskId, status: task };
+        } else {
+          console.error(`Task ${taskId} not found in API response`);
+          return { taskId, status: { task_id: taskId, status: 'failed' as const, error: 'Task not found' } };
         }
       });
 
-      const results = await Promise.all(promises);
+      {/*      const results = await Promise.all(promises);    */}
       
       setActiveTasks(prev => {
         const newMap = new Map(prev);

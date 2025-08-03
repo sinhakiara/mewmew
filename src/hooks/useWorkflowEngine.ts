@@ -1,5 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Workflow, Node } from '../components/WorkflowEditor';
+import { WorkflowEngine } from '../engine/WorkflowEngine';
+import { WorkflowGraph, ExecutionContext } from '../engine/types/WorkflowTypes';
 
 interface WorkflowEngineConfig {
   apiBaseUrl: string;
@@ -8,6 +10,8 @@ interface WorkflowEngineConfig {
 
 export const useWorkflowEngine = (config?: WorkflowEngineConfig) => {
   const [isExecuting, setIsExecuting] = useState(false);
+  const [executionContext, setExecutionContext] = useState<ExecutionContext | null>(null);
+  const [workflowEngine] = useState(() => new WorkflowEngine());
   interface ExecutionRecord {
     id: string;
     workflowId: string;
@@ -57,16 +61,17 @@ export const useWorkflowEngine = (config?: WorkflowEngineConfig) => {
       // Poll for task completion
       return new Promise((resolve, reject) => {
         const pollInterval = setInterval(async () => {
-          try {
-            const status = await apiCall(`/tasks/${taskId}`);
+	  try {
+            const allTasks = await apiCall('/api/tasks');
+            const task = allTasks.find((t: any) => t.task_id === taskId);
             
-            if (status.status === 'completed') {
+            if (task && task.status === 'completed') {
               clearInterval(pollInterval);
-              resolve(parseOutput(node.type, status.output));
-            } else if (status.status === 'failed') {
+              resolve(parseOutput(node.type, task.output));
+            } else if (task && task.status === 'failed') {
               clearInterval(pollInterval);
-              reject(new Error(`Task failed: ${status.output}`));
-            }
+              reject(new Error(`Task failed: ${task.output}`));
+            }  
           } catch (error) {
             clearInterval(pollInterval);
             reject(error);
@@ -184,7 +189,86 @@ export const useWorkflowEngine = (config?: WorkflowEngineConfig) => {
   };
 
   // Execute entire workflow
+  const convertWorkflow = (legacyWorkflow: Workflow): WorkflowGraph => {
+    return {
+      id: legacyWorkflow.id,
+      name: legacyWorkflow.name || 'Untitled Workflow',
+      nodes: legacyWorkflow.nodes.map(node => ({
+        id: node.id,
+        type: node.type,
+        title: node.title,
+        position: node.position,
+        config: node.config || {},
+        status: (node.status === 'success' ? 'completed' : node.status) as any || 'idle',
+        inputs: ['main'], // Default input
+        outputs: ['main'], // Default output
+        data: (node as any).data,
+        error: (node as any).error
+      })),
+      connections: legacyWorkflow.connections.map(conn => ({
+        id: `${conn.source}-${conn.target}`,
+        source: conn.source,
+        target: conn.target,
+        sourceHandle: 'main',
+        targetHandle: 'main'
+      })),
+      variables: {
+        apiBaseUrl: baseUrl,
+        authToken
+      },
+      status: 'idle'
+    };
+  };
+
+  // Execute entire workflow using new engine
   const execute = useCallback(async (workflow: Workflow) => {
+    setIsExecuting(true);
+    
+    try {
+      // Convert to new workflow format
+      const workflowGraph = convertWorkflow(workflow);
+      
+      // Execute with progress tracking
+      const context = await workflowEngine.executeWorkflow(
+        workflowGraph,
+        { apiBaseUrl: baseUrl, authToken },
+        (progressContext) => {
+          setExecutionContext({ ...progressContext });
+        }
+      );
+      
+      // Create execution record for compatibility
+      const execution: ExecutionRecord = {
+        id: context.executionId,
+        workflowId: context.workflowId,
+        startTime: new Date(context.startTime).toISOString(),
+        endTime: new Date().toISOString(),
+        status: context.failedNodes.size > 0 ? 'failed' : 'completed',
+        logs: context.logs.map(log => `${log.level.toUpperCase()}: ${log.message}`)
+      };
+      
+      setExecutionHistory(prev => [...prev, execution]);
+      setExecutionContext(context);
+      
+    } catch (error) {
+      console.error('Workflow execution failed:', error);
+      
+      const execution: ExecutionRecord = {
+        id: `exec-${Date.now()}`,
+        workflowId: workflow.id,
+        startTime: new Date().toISOString(),
+        endTime: new Date().toISOString(),
+        status: 'failed',
+        logs: [`❌ Workflow failed: ${error}`]
+      };
+      
+      setExecutionHistory(prev => [...prev, execution]);
+      throw error;
+    } finally {
+      setIsExecuting(false);
+    }
+  }, [workflowEngine, baseUrl, authToken]); 
+  {/*  const execute = useCallback(async (workflow: Workflow) => {
     setIsExecuting(true);
     
     const executionId = `exec-${Date.now()}`;
@@ -239,7 +323,7 @@ export const useWorkflowEngine = (config?: WorkflowEngineConfig) => {
       );
     }
   }, []);
-
+*/}
   // Get execution order based on connections
   const getExecutionOrder = (workflow: Workflow): string[] => {
     const visited = new Set<string>();
@@ -275,6 +359,8 @@ export const useWorkflowEngine = (config?: WorkflowEngineConfig) => {
     execute,
     executeNode,
     isExecuting,
-    executionHistory
+    executionHistory,
+    executionContext,
+    workflowEngine
   };
 };
