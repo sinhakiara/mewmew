@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { WorkflowCanvas } from './WorkflowCanvas';
 import { NodePalette } from './NodePalette';
@@ -6,18 +5,19 @@ import { WorkflowToolbar } from './WorkflowToolbar';
 import { ExecutionPanel } from './ExecutionPanel';
 import { NodeOutputModal } from './NodeOutputModal';
 import { NodeRemovalDialog } from './NodeRemovalDialog';
+import { WorkflowSidebar } from './WorkflowSidebar';
+import { WorkflowHeader } from './WorkflowHeader';
 import { useWorkflowEngine } from '../hooks/useWorkflowEngine';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useTaskPolling } from '../hooks/useTaskPolling';
 import { useWorkflowFileManager } from './WorkflowFileManager';
-
-
+import { toast } from 'sonner';
 
 export interface Node {
   id: string;
   type: string;
   title: string;
-  category: 'recon' | 'scanning' | 'fuzzing' | 'exploit';
+  category: 'recon' | 'scanning' | 'fuzzing' | 'exploit' | 'logic' | 'data';
   position: { x: number; y: number };
   status: 'idle' | 'pending' | 'running' | 'success' | 'failed';
   config: Record<string, any>;
@@ -40,7 +40,6 @@ export interface Workflow {
   status: 'idle' | 'running' | 'completed' | 'failed';
 }
 
-//const WorkflowEditor: React.FC = () => {
 interface WorkflowEditorProps {
   authToken: string;
   apiBaseUrl: string;
@@ -48,18 +47,29 @@ interface WorkflowEditorProps {
   connectionStatus: string;
 }
 
-const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
-  authToken,
-  apiBaseUrl,
-  wsUrl,
-  connectionStatus: parentConnectionStatus
+const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ 
+  authToken, 
+  apiBaseUrl, 
+  wsUrl, 
+  connectionStatus: parentConnectionStatus 
 }) => {
-  const [workflow, setWorkflow] = useState<Workflow>({
-    id: 'workflow-1',
-    name: 'Security Assessment',
-    nodes: [],
-    connections: [],
-    status: 'idle'
+  // Load workflow from localStorage on mount, or use default
+  const [workflow, setWorkflow] = useState<Workflow>(() => {
+    const saved = localStorage.getItem('current-workflow');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (error) {
+        console.warn('Failed to parse saved workflow:', error);
+      }
+    }
+    return {
+      id: 'workflow-1',
+      name: 'Security Assessment',
+      nodes: [],
+      connections: [],
+      status: 'idle'
+    };
   });
 
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
@@ -69,10 +79,10 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
   const [executingConnections, setExecutingConnections] = useState<Set<string>>(new Set());
   const [nodeToRemove, setNodeToRemove] = useState<string | null>(null);
   const [outputModalNode, setOutputModalNode] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState<string>('visual-workflow');
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  //const workflowEngine = useWorkflowEngine();
-  //const { logs, connectionStatus, clearLogs } = useWebSocket('ws://192.168.29.20:8000/ws/logs');
   const workflowEngine = useWorkflowEngine({ apiBaseUrl, authToken });
   const { logs, connectionStatus, clearLogs } = useWebSocket(wsUrl);
   const taskPolling = useTaskPolling({ apiBaseUrl, authToken });
@@ -84,6 +94,7 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
   // Add node to workflow
   const addNode = useCallback((nodeType: string, position: { x: number; y: number }) => {
     const nodeConfigs = {
+      // Discovery nodes
       subfinder: {
         title: 'Subfinder',
         category: 'recon' as const,
@@ -94,20 +105,53 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
         category: 'recon' as const,
         config: { domain: '', mode: 'passive', timeout: 60 }
       },
+      // Analysis nodes
       ffuf: {
         title: 'FFUF',
         category: 'fuzzing' as const,
         config: { url: '', wordlist: '/usr/share/wordlists/common.txt', threads: 40 }
       },
-      arjun: {
-        title: 'Arjun',
-        category: 'scanning' as const,
-        config: { url: '', methods: ['GET', 'POST'], delay: 2 }
-      },
       nuclei: {
         title: 'Nuclei',
         category: 'exploit' as const,
         config: { target: '', templates: 'default', severity: 'info,low,medium,high,critical' }
+      },
+      httpx: {
+        title: 'HTTP Request',
+        category: 'scanning' as const,
+        config: { url: '', method: 'GET', headers: '{}', bodyType: 'json', timeout: 30 }
+      },
+      // Logic nodes
+      conditional: {
+        title: 'Conditional',
+        category: 'logic' as const,
+        config: { condition: '', description: '' }
+      },
+      filter: {
+        title: 'Filter',
+        category: 'logic' as const,
+        config: { filterType: 'include', field: '', value: '', operator: 'equals' }
+      },
+      merge: {
+        title: 'Merge',
+        category: 'logic' as const,
+        config: { mergeStrategy: 'combine', outputFormat: 'array' }
+      },
+      split: {
+        title: 'Iterator',
+        category: 'logic' as const,
+        config: { sourceType: 'input', inputField: '', batchSize: 10, parallel: false }
+      },
+      schedule: {
+        title: 'Wait',
+        category: 'logic' as const,
+        config: { waitType: 'fixed', duration: 5, minWait: 0, maxWait: 300 }
+      },
+      // Data nodes
+      transform: {
+        title: 'Transform',
+        category: 'data' as const,
+        config: { transformType: 'map', expression: '', outputField: '' }
       }
     };
 
@@ -153,12 +197,12 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
   // Add connection between nodes
   const addConnection = useCallback((source: string, target: string) => {
     const connectionId = `${source}-${target}`;
-
+    
     // Check if connection already exists
-    const exists = workflow.connections.find(conn =>
+    const exists = workflow.connections.find(conn => 
       conn.source === source && conn.target === target
     );
-
+    
     if (exists) return;
 
     const newConnection: Connection = {
@@ -188,192 +232,118 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
 
   const confirmRemoveNode = useCallback(() => {
     if (!nodeToRemove) return;
-
+    
     setWorkflow(prev => ({
       ...prev,
       nodes: prev.nodes.filter(node => node.id !== nodeToRemove),
-      connections: prev.connections.filter(conn =>
+      connections: prev.connections.filter(conn => 
         conn.source !== nodeToRemove && conn.target !== nodeToRemove
       )
     }));
-
+    
     // Clear selection if the removed node was selected
-   if (selectedNode === nodeToRemove) {
+    if (selectedNode === nodeToRemove) {
       setSelectedNode(null);
     }
+    
     setNodeToRemove(null);
   }, [nodeToRemove, selectedNode]);
 
-  // Execute workflow with visual updates
+  // Execute workflow using the workflow engine
   const executeWorkflow = useCallback(async () => {
     if (workflow.nodes.length === 0) return;
 
     setWorkflow(prev => ({ ...prev, status: 'running' }));
-
+    setLastUpdated(new Date());
+    
     try {
-// --------------------------
-            {/*
+      // Execute workflow using the engine
       await workflowEngine.execute(workflow);
+      
+      // Update workflow status based on execution result
+      const context = workflowEngine.executionContext;
+      if (context) {
+        if (context.failedNodes.size > 0) {
+          setWorkflow(prev => ({ ...prev, status: 'failed' }));
+          toast.error(`Workflow failed. ${context.failedNodes.size} nodes failed.`);
+        } else {
+          setWorkflow(prev => ({ ...prev, status: 'completed' }));
+          toast.success('Workflow completed successfully!');
+        }
+
+        // Update node statuses and outputs from execution context
+        setWorkflow(prev => ({
+          ...prev,
+          nodes: prev.nodes.map(node => {
+            const nodeOutput = context.nodeOutputs[node.id];
+            const isCompleted = context.completedNodes.has(node.id);
+            const isFailed = context.failedNodes.has(node.id);
+            const isRunning = context.currentNodes.has(node.id);
+            
+            let status = node.status;
+            if (isFailed) status = 'failed';
+            else if (isCompleted) status = 'success';
+            else if (isRunning) status = 'running';
+            
+            return {
+              ...node,
+              status,
+              outputs: nodeOutput?.data || node.outputs
+            };
+          })
+        }));
+      }
+      setLastUpdated(new Date());
     } catch (error) {
       console.error('Workflow execution failed:', error);
       setWorkflow(prev => ({ ...prev, status: 'failed' }));
+      toast.error(`Workflow execution failed: ${error.message}`);
+      setLastUpdated(new Date());
     }
   }, [workflow, workflowEngine]);
 
-  // Save workflow
-  const saveWorkflow = useCallback(() => {
-  try {
-      const workflowData = {
-        ...workflow,
-        savedAt: new Date().toISOString()
-      };
-      localStorage.setItem(`workflow-${workflow.id}`, JSON.stringify(workflowData));
-      alert('Workflow saved successfully!');
-    } catch (error) {
-      console.error('Failed to save workflow:', error);
-      alert('Failed to save workflow. Please try again.');
-    }
-  }, [workflow]);
+  // Pause workflow execution
+  const pauseWorkflow = useCallback(() => {
+    workflowEngine.workflowEngine.pauseWorkflow();
+    setWorkflow(prev => ({ ...prev, status: 'idle' }));
+    toast.info('Workflow paused');
+  }, [workflowEngine]);
 
-  // Load workflow
-  const loadWorkflow = useCallback(() => {
-    try {
-      const workflowList = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith('workflow-')) {
-          const saved = localStorage.getItem(key);
-          if (saved) {
-            const workflowData = JSON.parse(saved);
-            workflowList.push({
-              id: workflowData.id,
-              name: workflowData.name,
-              savedAt: workflowData.savedAt || 'Unknown'
-            });
-          }
-        }
-      }
-
-      if (workflowList.length === 0) {
-        alert('No saved workflows found.');
-        return;
-      }
-
-      // Simple workflow selector - in a real app, you'd use a proper modal
-      const workflowName = prompt(`Available workflows:\n${workflowList.map((w, i) => `${i + 1}. ${w.name} (${new Date(w.savedAt).toLocaleString()})`).join('\n')}\n\nEnter the number of the workflow to load:`);
-
-      if (workflowName) {
-        const index = parseInt(workflowName) - 1;
-        if (index >= 0 && index < workflowList.length) {
-          const selectedWorkflow = workflowList[index];
-          const saved = localStorage.getItem(`workflow-${selectedWorkflow.id}`);
-          if (saved) {
-            setWorkflow(JSON.parse(saved));
-            alert('Workflow loaded successfully!');
-          }
-        } else {
-          alert('Invalid selection.');
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load workflow:', error);
-      alert('Failed to load workflow. Please try again.');
-    }
-  }, []);
-*/} //_______________
-
-  // Get execution order
-      const executionOrder = getExecutionOrder(workflow);
-
-      for (const nodeId of executionOrder) {
-        const node = workflow.nodes.find(n => n.id === nodeId);
-        if (!node) continue;
-
-        // Update node status to running
-        setWorkflow(prev => ({
-          ...prev,
-          nodes: prev.nodes.map(n =>
-            n.id === nodeId ? { ...n, status: 'running' } : n
-          )
-        }));
-
-        // Show connection animation
-        const inputConnection = workflow.connections.find(conn => conn.target === nodeId);
-        if (inputConnection) {
-          setExecutingConnections(prev => new Set(prev).add(inputConnection.id));
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Animation delay
-        }
-
-        try {
-          // Add task to polling
-          const taskId = `task-${nodeId}-${Date.now()}`;
-          taskPolling.addTask(taskId);
-
-          // Execute node (simplified - you'll need to integrate with actual execution)
-          await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate execution
-
-          // Update node status to success
-          setWorkflow(prev => ({
-            ...prev,
-            nodes: prev.nodes.map(n =>
-              n.id === nodeId ? { ...n, status: 'success', outputs: { data: `Output from ${n.title}` } } : n
-            )
-          }));
-
-        } catch (error) {
-          setWorkflow(prev => ({
-            ...prev,
-            nodes: prev.nodes.map(n =>
-              n.id === nodeId ? { ...n, status: 'failed' } : n
-            )
-          }));
-        }
-
-        // Clear connection animation
-        if (inputConnection) {
-          setExecutingConnections(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(inputConnection.id);
-            return newSet;
-          });
-        }
-      }
-
-      setWorkflow(prev => ({ ...prev, status: 'completed' }));
-    } catch (error) {
-      console.error('Workflow execution failed:', error);
-      setWorkflow(prev => ({ ...prev, status: 'failed' }));
-    }
-  }, [workflow, taskPolling]);
+  // Stop workflow execution
+  const stopWorkflow = useCallback(() => {
+    workflowEngine.workflowEngine.cancelWorkflow();
+    setWorkflow(prev => ({ ...prev, status: 'idle' }));
+    toast.info('Workflow stopped');
+  }, [workflowEngine]);
 
   // Get execution order based on connections
   const getExecutionOrder = (workflow: Workflow): string[] => {
     const visited = new Set<string>();
     const order: string[] = [];
-
+    
     const visit = (nodeId: string) => {
       if (visited.has(nodeId)) return;
       visited.add(nodeId);
-
+      
       // Visit dependencies first
       const dependencies = workflow.connections
         .filter(conn => conn.target === nodeId)
         .map(conn => conn.source);
-
+      
       dependencies.forEach(visit);
       order.push(nodeId);
     };
-
+    
     // Start with nodes that have no dependencies
     const rootNodes = workflow.nodes
       .filter(node => !workflow.connections.some(conn => conn.target === node.id))
       .map(node => node.id);
-
+    
     rootNodes.forEach(visit);
-
+    
     // Add any remaining nodes
     workflow.nodes.forEach(node => visit(node.id));
-
+    
     return order;
   };
 
@@ -389,8 +359,26 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
 
   // View node output
   const viewNodeOutput = useCallback((nodeId: string) => {
-    setOutputModalNode(nodeId);
-  }, []);
+    const node = workflow.nodes.find(n => n.id === nodeId);
+    if (node) {
+      // Get output from execution context if available, otherwise use node data
+      const nodeOutput = workflowEngine.executionContext?.nodeOutputs[nodeId];
+      const outputData = nodeOutput?.data || node.outputs;
+      
+      if (outputData) {
+        setOutputModalNode(nodeId);
+      }
+    }
+  }, [workflow.nodes, workflowEngine.executionContext]);
+
+  // Auto-save workflow to localStorage whenever it changes
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      localStorage.setItem('current-workflow', JSON.stringify(workflow));
+    }, 500); // Debounce saves
+    
+    return () => clearTimeout(timeoutId);
+  }, [workflow]);
 
   // Update node status based on task polling
   useEffect(() => {
@@ -400,7 +388,7 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
         if (taskStatus) {
           setWorkflow(prev => ({
             ...prev,
-            nodes: prev.nodes.map(n =>
+            nodes: prev.nodes.map(n => 
               n.id === node.id ? { ...n, status: taskStatus.status === 'completed' ? 'success' : taskStatus.status } : n
             )
           }));
@@ -409,65 +397,84 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
     });
   }, [taskPolling.activeTasks, workflow.nodes]);
 
+  // Render different sections based on activeSection
+  const renderMainContent = () => {
+    switch (activeSection) {
+      case 'visual-workflow':
+        return (
+          <div className="relative h-full w-full">
+            <NodePalette onAddNode={addNode} />
+            <WorkflowCanvas
+              workflow={workflow}
+              selectedNode={selectedNode}
+              onSelectNode={setSelectedNode}
+              onUpdateNodePosition={updateNodePosition}
+              onUpdateNodeConfig={updateNodeConfig}
+              onAddConnection={addConnection}
+              onRemoveConnection={removeConnection}
+              onRemoveNode={removeNode}
+              onAddNode={addNode}
+              isDragging={isDragging}
+              setIsDragging={setIsDragging}
+              dragOffset={dragOffset}
+              setDragOffset={setDragOffset}
+              canvasOffset={canvasOffset}
+              setCanvasOffset={setCanvasOffset}
+              executingConnections={executingConnections}
+            />
+          </div>
+        );
+      case 'insights':
+      case 'tasks':
+      case 'workers':
+      case 'logs':
+      case 'apiDocs':
+        return (
+          <ExecutionPanel
+            workflow={workflow}
+            logs={logs}
+            selectedNode={selectedNode}
+            onUpdateNodeConfig={updateNodeConfig}
+            onClearLogs={clearLogs}
+            onViewNodeOutput={viewNodeOutput}
+            taskPolling={taskPolling}
+            executionContext={workflowEngine.executionContext}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
-    <div className="workflow-editor">
-      {/* Hover trigger areas */}
-      <div
-        className="toolbar-trigger"
-        onMouseEnter={() => document.querySelector('.workflow-toolbar')?.classList.add('toolbar-hover')}
-        onMouseLeave={() => document.querySelector('.workflow-toolbar')?.classList.remove('toolbar-hover')}
-      />
-      <div
-        className="palette-trigger"
-        onMouseEnter={() => document.querySelector('.node-palette')?.classList.add('palette-hover')}
-        onMouseLeave={() => document.querySelector('.node-palette')?.classList.remove('palette-hover')}
-      />
-      <div
-        className="execution-trigger"
-        onMouseEnter={() => document.querySelector('.execution-panel')?.classList.add('panel-hover')}
-        onMouseLeave={() => document.querySelector('.execution-panel')?.classList.remove('panel-hover')}
-      />
-
-      <WorkflowToolbar
+    <div className="flex h-screen w-full bg-background">
+      {/* Sidebar */}
+      <WorkflowSidebar
         workflow={workflow}
-        onExecute={executeWorkflow}
-        onSave={saveWorkflow}
-        onLoad={loadWorkflow}
-        connectionStatus={connectionStatus}
+        activeSection={activeSection}
+        setActiveSection={setActiveSection}
+        onExecuteWorkflow={executeWorkflow}
+        onPauseWorkflow={pauseWorkflow}
+        onStopWorkflow={stopWorkflow}
+        onSaveWorkflow={saveWorkflow}
+        onLoadWorkflow={loadWorkflow}
+        isExecuting={workflow.status === 'running'}
       />
 
-      {/*      <NodePalette onAddNode={addNode} />  */}
-       <NodePalette onAddNode={addNode} />
-       {/*  <NodePalette onAddNode={addNode} nodeRegistry={nodeRegistry} /> */}
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header */}
+        <WorkflowHeader
+          workflow={workflow}
+          connectionStatus={connectionStatus}
+          lastUpdated={lastUpdated}
+        />
 
-      <WorkflowCanvas
-        workflow={workflow}
-        selectedNode={selectedNode}
-        onSelectNode={setSelectedNode}
-        onUpdateNodePosition={updateNodePosition}
-        onUpdateNodeConfig={updateNodeConfig}
-        onAddConnection={addConnection}
-        onRemoveConnection={removeConnection}
-        onRemoveNode={removeNode}
-        onAddNode={addNode}
-        isDragging={isDragging}
-        setIsDragging={setIsDragging}
-        dragOffset={dragOffset}
-        setDragOffset={setDragOffset}
-        canvasOffset={canvasOffset}
-        setCanvasOffset={setCanvasOffset}
-        executingConnections={executingConnections}
-      />
-
-      <ExecutionPanel
-        workflow={workflow}
-        logs={logs}
-        selectedNode={selectedNode}
-        onUpdateNodeConfig={updateNodeConfig}
-        onClearLogs={clearLogs}
-        onViewNodeOutput={viewNodeOutput}
-        taskPolling={taskPolling}
-      />
+        {/* Main Content Area */}
+        <main className="flex-1 overflow-hidden">
+          {renderMainContent()}
+        </main>
+      </div>
 
       {/* Hidden file input for workflow loading */}
       {fileInput}
@@ -485,7 +492,15 @@ const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
         open={outputModalNode !== null}
         onOpenChange={(open) => !open && setOutputModalNode(null)}
         nodeTitle={outputModalNode ? workflow.nodes.find(n => n.id === outputModalNode)?.title || '' : ''}
-        nodeOutputs={outputModalNode ? workflow.nodes.find(n => n.id === outputModalNode)?.outputs : undefined}
+        nodeOutputs={(() => {
+          if (!outputModalNode) return undefined;
+          const node = workflow.nodes.find(n => n.id === outputModalNode);
+          if (!node) return undefined;
+          
+          // Get output from execution context if available, otherwise use node data
+          const nodeOutput = workflowEngine.executionContext?.nodeOutputs[outputModalNode];
+          return nodeOutput?.data || node.outputs;
+        })()}
       />
     </div>
   );

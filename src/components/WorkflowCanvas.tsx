@@ -53,8 +53,8 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     if (!node) return { x: 0, y: 0 };
     
     return {
-      x: node.position.x + 100, // Half of node width
-      y: node.position.y + 40   // Half of node height
+      x: node.position.x + 60, // Half of circular node diameter (120px)
+      y: node.position.y + 60   // Half of circular node diameter (120px)
     };
   };
 
@@ -231,7 +231,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
         isConnecting={isConnecting}
         mousePosition={mousePosition}
         onRemoveConnection={onRemoveConnection}
-	executingConnections={executingConnections}
+        executingConnections={executingConnections}
       />
 
       {/* Nodes */}
@@ -245,7 +245,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           onConnectionStart={handleConnectionStart}
           onConnectionEnd={handleConnectionEnd}
           onConfigChange={onUpdateNodeConfig}
-	  onRemove={onRemoveNode}
+          onRemove={onRemoveNode}
         />
       ))}
 

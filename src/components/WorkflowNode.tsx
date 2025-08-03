@@ -51,8 +51,7 @@ export const WorkflowNode: React.FC<WorkflowNodeProps> = ({
   return (
     <>
       <div
-        //className={`workflow-node ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''}`}
-	className={`workflow-node ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${node.status === 'running' ? 'node-running' : ''}`}
+        className={`workflow-node ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${node.status === 'running' ? 'node-running' : ''}`}
         style={{
           left: node.position.x,
           top: node.position.y
@@ -73,14 +72,12 @@ export const WorkflowNode: React.FC<WorkflowNodeProps> = ({
           </div>
           <div className="node-title">{node.title}</div>
           <div className={`node-status ${node.status}`} />
-	  {/* Remove button */}
+          {/* Remove button */}
           <button
             className="node-remove-btn"
             onClick={(e) => {
               e.stopPropagation();
-              if (confirm(`Remove ${node.title} node?`)) {
-                onRemove(node.id);
-              }
+              onRemove(node.id);
             }}
             title="Remove node"
           >
@@ -104,6 +101,27 @@ export const WorkflowNode: React.FC<WorkflowNodeProps> = ({
           )}
           {node.type === 'nuclei' && (
             <div>Target: {node.config.target || 'Not set'}</div>
+          )}
+          {node.type === 'httpx' && (
+            <div>URL: {node.config.url || 'Not set'}</div>
+          )}
+          {node.type === 'conditional' && (
+            <div>Condition: {node.config.condition || 'Not set'}</div>
+          )}
+          {node.type === 'filter' && (
+            <div>Filter: {node.config.field || 'Not set'}</div>
+          )}
+          {node.type === 'merge' && (
+            <div>Strategy: {node.config.mergeStrategy || 'combine'}</div>
+          )}
+          {node.type === 'split' && (
+            <div>Source: {node.config.sourceType || 'input'}</div>
+          )}
+          {node.type === 'schedule' && (
+            <div>Wait: {node.config.duration || 5}s</div>
+          )}
+          {node.type === 'transform' && (
+            <div>Type: {node.config.transformType || 'map'}</div>
           )}
           
           {node.outputs && (
@@ -259,6 +277,306 @@ export const WorkflowNode: React.FC<WorkflowNodeProps> = ({
                       <option value="high,critical">High+</option>
                       <option value="critical">Critical Only</option>
                     </select>
+                  </div>
+                </>
+              )}
+
+              {node.type === 'httpx' && (
+                <>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">URL</label>
+                    <input
+                      type="text"
+                      name="url"
+                      defaultValue={node.config.url}
+                      placeholder="https://example.com"
+                      className="w-full p-2 border border-gray-300 rounded"
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Method</label>
+                    <select
+                      name="method"
+                      defaultValue={node.config.method}
+                      className="w-full p-2 border border-gray-300 rounded"
+                    >
+                      <option value="GET">GET</option>
+                      <option value="POST">POST</option>
+                      <option value="PUT">PUT</option>
+                      <option value="DELETE">DELETE</option>
+                      <option value="PATCH">PATCH</option>
+                    </select>
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Headers (JSON)</label>
+                    <textarea
+                      name="headers"
+                      defaultValue={node.config.headers}
+                      placeholder='{"Content-Type": "application/json"}'
+                      className="w-full p-2 border border-gray-300 rounded h-20"
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Body Type</label>
+                    <select
+                      name="bodyType"
+                      defaultValue={node.config.bodyType}
+                      className="w-full p-2 border border-gray-300 rounded"
+                    >
+                      <option value="json">JSON</option>
+                      <option value="form">Form Data</option>
+                      <option value="raw">Raw Text</option>
+                    </select>
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Timeout (seconds)</label>
+                    <input
+                      type="number"
+                      name="timeout"
+                      defaultValue={node.config.timeout}
+                      min="1"
+                      max="300"
+                      className="w-full p-2 border border-gray-300 rounded"
+                    />
+                  </div>
+                </>
+              )}
+
+              {node.type === 'conditional' && (
+                <>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Condition</label>
+                    <textarea
+                      name="condition"
+                      defaultValue={node.config.condition}
+                      placeholder="item.status === 'success'"
+                      className="w-full p-2 border border-gray-300 rounded h-20"
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Description</label>
+                    <input
+                      type="text"
+                      name="description"
+                      defaultValue={node.config.description}
+                      placeholder="Check if status is success"
+                      className="w-full p-2 border border-gray-300 rounded"
+                    />
+                  </div>
+                </>
+              )}
+
+              {node.type === 'filter' && (
+                <>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Filter Type</label>
+                    <select
+                      name="filterType"
+                      defaultValue={node.config.filterType}
+                      className="w-full p-2 border border-gray-300 rounded"
+                    >
+                      <option value="include">Include</option>
+                      <option value="exclude">Exclude</option>
+                    </select>
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Field</label>
+                    <input
+                      type="text"
+                      name="field"
+                      defaultValue={node.config.field}
+                      placeholder="status"
+                      className="w-full p-2 border border-gray-300 rounded"
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Value</label>
+                    <input
+                      type="text"
+                      name="value"
+                      defaultValue={node.config.value}
+                      placeholder="active"
+                      className="w-full p-2 border border-gray-300 rounded"
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Operator</label>
+                    <select
+                      name="operator"
+                      defaultValue={node.config.operator}
+                      className="w-full p-2 border border-gray-300 rounded"
+                    >
+                      <option value="equals">Equals</option>
+                      <option value="contains">Contains</option>
+                      <option value="startsWith">Starts With</option>
+                      <option value="endsWith">Ends With</option>
+                      <option value="regex">Regex</option>
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {node.type === 'merge' && (
+                <>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Merge Strategy</label>
+                    <select
+                      name="mergeStrategy"
+                      defaultValue={node.config.mergeStrategy}
+                      className="w-full p-2 border border-gray-300 rounded"
+                    >
+                      <option value="combine">Combine Arrays</option>
+                      <option value="append">Append Objects</option>
+                      <option value="merge">Merge Objects</option>
+                      <option value="replace">Replace</option>
+                    </select>
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Output Format</label>
+                    <select
+                      name="outputFormat"
+                      defaultValue={node.config.outputFormat}
+                      className="w-full p-2 border border-gray-300 rounded"
+                    >
+                      <option value="array">Array</option>
+                      <option value="object">Object</option>
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {node.type === 'split' && (
+                <>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Source Type</label>
+                    <select
+                      name="sourceType"
+                      defaultValue={node.config.sourceType}
+                      className="w-full p-2 border border-gray-300 rounded"
+                    >
+                      <option value="input">From Input</option>
+                      <option value="manual">Manual List</option>
+                    </select>
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Input Field</label>
+                    <input
+                      type="text"
+                      name="inputField"
+                      defaultValue={node.config.inputField}
+                      placeholder="data"
+                      className="w-full p-2 border border-gray-300 rounded"
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Batch Size</label>
+                    <input
+                      type="number"
+                      name="batchSize"
+                      defaultValue={node.config.batchSize}
+                      min="1"
+                      max="1000"
+                      className="w-full p-2 border border-gray-300 rounded"
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        name="parallel"
+                        defaultChecked={node.config.parallel}
+                        className="rounded"
+                      />
+                      <span className="text-sm font-medium">Process in parallel</span>
+                    </label>
+                  </div>
+                </>
+              )}
+
+              {node.type === 'schedule' && (
+                <>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Wait Type</label>
+                    <select
+                      name="waitType"
+                      defaultValue={node.config.waitType}
+                      className="w-full p-2 border border-gray-300 rounded"
+                    >
+                      <option value="fixed">Fixed Duration</option>
+                      <option value="random">Random Duration</option>
+                    </select>
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Duration (seconds)</label>
+                    <input
+                      type="number"
+                      name="duration"
+                      defaultValue={node.config.duration}
+                      min="0"
+                      max="3600"
+                      className="w-full p-2 border border-gray-300 rounded"
+                    />
+                  </div>
+                  {node.config.waitType === 'random' && (
+                    <>
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium mb-2">Min Wait (seconds)</label>
+                        <input
+                          type="number"
+                          name="minWait"
+                          defaultValue={node.config.minWait}
+                          min="0"
+                          className="w-full p-2 border border-gray-300 rounded"
+                        />
+                      </div>
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium mb-2">Max Wait (seconds)</label>
+                        <input
+                          type="number"
+                          name="maxWait"
+                          defaultValue={node.config.maxWait}
+                          min="0"
+                          className="w-full p-2 border border-gray-300 rounded"
+                        />
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+
+              {node.type === 'transform' && (
+                <>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Transform Type</label>
+                    <select
+                      name="transformType"
+                      defaultValue={node.config.transformType}
+                      className="w-full p-2 border border-gray-300 rounded"
+                    >
+                      <option value="map">Map</option>
+                      <option value="reduce">Reduce</option>
+                      <option value="sort">Sort</option>
+                      <option value="unique">Remove Duplicates</option>
+                    </select>
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Expression</label>
+                    <textarea
+                      name="expression"
+                      defaultValue={node.config.expression}
+                      placeholder="item => ({ ...item, processed: true })"
+                      className="w-full p-2 border border-gray-300 rounded h-20"
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium mb-2">Output Field</label>
+                    <input
+                      type="text"
+                      name="outputField"
+                      defaultValue={node.config.outputField}
+                      placeholder="results"
+                      className="w-full p-2 border border-gray-300 rounded"
+                    />
                   </div>
                 </>
               )}

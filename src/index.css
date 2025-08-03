@@ -1,7 +1,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-@import '@fortawesome/fontawesome-free/css/all.min.css';
+
 /* Workflow Editor Design System - n8n inspired */
 
 @layer base {
@@ -23,6 +23,8 @@
     --tool-scanning: 27 96% 61%;
     --tool-fuzzing: 346 87% 43%;
     --tool-exploit: 0 84% 60%;
+    --tool-logic: 259 94% 67%;
+    --tool-data: 142 71% 45%;
     
     /* Connection Colors */
     --connection-default: 220 13% 91%;
@@ -147,89 +149,102 @@
 .workflow-node {
   position: absolute;
   background: hsl(var(--node-bg));
-  border: 2px solid hsl(var(--node-border));
-  border-radius: var(--radius);
- /* box-shadow: 0 4px 12px hsl(var(--node-shadow));
-  cursor: pointer;
-  user-select: none; */
+  border: 3px solid hsl(var(--node-border));
+  border-radius: 50%;
   cursor: move;
-  transition: all 0.2s ease;
-  /*min-width: 200px;
-  min-height: 80px;*/
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   user-select: none;
-  min-width: 160px;
-  min-height: 70px;
-  max-width: 200px;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 .workflow-node:hover {
-  border-color: hsl(var(--node-hover));
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px hsl(var(--node-shadow));
+  border-color: hsl(var(--primary));
+  transform: translateY(-4px) scale(1.05);
+  box-shadow: 0 12px 32px hsl(var(--primary) / 0.3);
 }
 
 .workflow-node.selected {
-  border-color: hsl(var(--node-selected));
-  box-shadow: 0 0 0 3px hsl(var(--node-selected) / 0.2);
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 4px hsl(var(--primary) / 0.2), 0 12px 32px hsl(var(--primary) / 0.4);
+  transform: scale(1.1);
 }
 
 .workflow-node.dragging {
-  transform: rotate(2deg);
+  transform: scale(1.15);
   z-index: 1000;
+  box-shadow: 0 16px 40px hsl(var(--primary) / 0.5);
 }
 
 /* Node Header */
 .node-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid hsl(var(--border));
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 8px;
   position: relative;
+  width: 100%;
+  height: 100%;
+  padding: 20px;
 }
 
 .node-icon {
-  /*width: 20px;
-  height: 20px;
-  border-radius: 4px;*/
-  width: 16px;
-  height: 16px;
-  border-radius: 3px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: bold;
   color: white;
-  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  margin-bottom: 4px;
 }
 
 .node-icon.recon { background: hsl(var(--tool-recon)); }
 .node-icon.scanning { background: hsl(var(--tool-scanning)); }
 .node-icon.fuzzing { background: hsl(var(--tool-fuzzing)); }
 .node-icon.exploit { background: hsl(var(--tool-exploit)); }
+.node-icon.logic { background: hsl(var(--tool-logic)); }
+.node-icon.data { background: hsl(var(--tool-data)); }
 
 .node-title {
   font-weight: 600;
   font-size: 12px;
   color: hsl(var(--foreground));
-  flex: 1;
+  text-align: center;
+  line-height: 1.2;
+  margin-top: 4px;
+  word-break: break-word;
+  max-width: 100px;
 }
+
 .node-remove-btn {
-  width: 16px;
-  height: 16px;
-  border: none;
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 24px;
+  height: 24px;
   background: hsl(var(--destructive));
   color: white;
-  border-radius: 3px;
-  font-size: 12px;
+  border: 2px solid hsl(var(--background));
+  border-radius: 50%;
+  font-size: 14px;
   font-weight: bold;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 30;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .workflow-node:hover .node-remove-btn {
@@ -241,13 +256,15 @@
 }
 
 .node-status {
-/*.node-status {
-  margin-left: auto;*/
-  width: 8px;
-  height: 8px;
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
+  border: 2px solid hsl(var(--background));
+  z-index: 2;
   background: hsl(var(--border));
-  margin-right: 8px;
 }
 
 .node-status.pending { background: hsl(var(--status-pending)); }
@@ -257,36 +274,45 @@
 
 /* Node Content */
 .node-content {
-  padding: 12px 16px;
-  font-size: 13px;
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
   color: hsl(var(--muted-foreground));
+  text-align: center;
+  max-width: 120px;
+  line-height: 1.3;
 }
 
 /* Connection Points */
 .node-connection {
   position: absolute;
-  width: 12px;
-  height: 12px;
-  border: 2px solid hsl(var(--node-border));
-  background: hsl(var(--node-bg));
+  width: 16px;
+  height: 16px;
+  border: 3px solid hsl(var(--background));
+  background: hsl(var(--connection-handle));
   border-radius: 50%;
   cursor: crosshair;
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 20;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .node-connection:hover {
-  border-color: hsl(var(--connection-active));
-  transform: scale(1.2);
+  background: hsl(var(--primary));
+  transform: scale(1.3);
+  box-shadow: 0 4px 12px hsl(var(--primary) / 0.5);
 }
 
 .node-connection.input {
-  left: -6px;
+  left: -8px;
   top: 50%;
   transform: translateY(-50%);
 }
 
 .node-connection.output {
-  right: -6px;
+  right: -8px;
   top: 50%;
   transform: translateY(-50%);
 }
@@ -323,11 +349,6 @@
   background: hsl(var(--node-bg));
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius);
-/*  box-shadow: 0 4px 12px hsl(var(--node-shadow));
-  display: flex;
-  gap: 8px;
-  padding: 8px;
-  z-index: 100; */
   padding: 12px 16px;
   display: flex;
   align-items: center;
@@ -386,7 +407,6 @@
   background: hsl(var(--node-bg));
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius);
- /* box-shadow: 0 4px 12px hsl(var(--node-shadow)); */
   box-shadow: 0 4px 12px hsl(var(--shadow));
   z-index: 100;
   max-height: calc(100vh - 140px);
@@ -568,7 +588,6 @@
   animation: flow 1s linear infinite;
 }
 
-
 /* Node running state */
 .workflow-node.node-running {
   border-color: hsl(var(--status-success));
@@ -601,4 +620,29 @@
 
 .auto-scroll-indicator.visible {
   opacity: 1;
+}
+
+/* Node Icon Colors for Palette */
+.node-icon-recon {
+  background: linear-gradient(135deg, hsl(262 83% 58%), hsl(262 83% 58% / 0.8)) !important;
+}
+
+.node-icon-scanning {
+  background: linear-gradient(135deg, hsl(221 83% 53%), hsl(221 83% 53% / 0.8)) !important;
+}
+
+.node-icon-fuzzing {
+  background: linear-gradient(135deg, hsl(25 95% 53%), hsl(25 95% 53% / 0.8)) !important;
+}
+
+.node-icon-exploit {
+  background: linear-gradient(135deg, hsl(0 72% 51%), hsl(0 72% 51% / 0.8)) !important;
+}
+
+.node-icon-logic {
+  background: linear-gradient(135deg, hsl(142 71% 45%), hsl(142 71% 45% / 0.8)) !important;
+}
+
+.node-icon-data {
+  background: linear-gradient(135deg, hsl(217 91% 60%), hsl(217 91% 60% / 0.8)) !important;
 }

@@ -10,6 +10,9 @@ import { ConditionalNode } from './nodes/impl/ConditionalNode';
 import { FilterNode } from './nodes/impl/FilterNode';
 import { MergeNode } from './nodes/impl/MergeNode';
 import { TransformNode } from './nodes/impl/TransformNode';
+import { HttpNode } from './nodes/impl/HttpNode';
+import { WaitNode } from './nodes/impl/WaitNode';
+import { IteratorNode } from './nodes/impl/IteratorNode';
 
 export class NodeRegistry {
   private nodeClasses: Map<NodeType, typeof BaseNode> = new Map();
@@ -28,18 +31,20 @@ export class NodeRegistry {
     // Analysis nodes  
     this.register(NodeType.NUCLEI, NucleiNode);
     this.register(NodeType.FFUF, FfufNode);
+    this.register(NodeType.HTTPX, HttpNode);
     
     // Logic nodes
     this.register(NodeType.CONDITIONAL, ConditionalNode);
     this.register(NodeType.FILTER, FilterNode);
     this.register(NodeType.MERGE, MergeNode);
+    this.register(NodeType.SPLIT, IteratorNode);
+    this.register(NodeType.SCHEDULE, WaitNode);
     
     // Data nodes
     this.register(NodeType.TRANSFORM, TransformNode);
 
     // TODO: Add more node implementations as needed
     // this.register(NodeType.ARJUN, ArjunNode);
-    // this.register(NodeType.HTTPX, HttpxNode);
     // this.register(NodeType.EXPORT, ExportNode);
   }
 
@@ -73,7 +78,6 @@ export class NodeRegistry {
         logs: []
       };
 
-      {/*      const instance = new nodeClass(dummyNode, dummyContext); */}
       const instance = new (nodeClass as any)(dummyNode, dummyContext);
       const definition = instance.getDefinition();
       this.nodeDefinitions.set(type, definition);
@@ -91,7 +95,6 @@ export class NodeRegistry {
       throw new Error(`Unknown node type: ${node.type}`);
     }
 
-    {/*    return new nodeClass(node, context); */}
     return new (nodeClass as any)(node, context);
   }
 

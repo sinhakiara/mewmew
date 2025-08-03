@@ -12,6 +12,7 @@ export const useWorkflowEngine = (config?: WorkflowEngineConfig) => {
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionContext, setExecutionContext] = useState<ExecutionContext | null>(null);
   const [workflowEngine] = useState(() => new WorkflowEngine());
+  
   interface ExecutionRecord {
     id: string;
     workflowId: string;
@@ -24,10 +25,9 @@ export const useWorkflowEngine = (config?: WorkflowEngineConfig) => {
   const [executionHistory, setExecutionHistory] = useState<ExecutionRecord[]>([]);
 
   const baseUrl = config?.apiBaseUrl || 'https://192.168.29.20:8000';
-  //const authToken = config?.authToken || localStorage.getItem('authToken');
   const authToken = config?.authToken || localStorage.getItem('dheeraj_token');
 
-  // API call helper
+  // API call helper aligned with OpenAPI spec
   const apiCall = async (endpoint: string, options: RequestInit = {}) => {
     const response = await fetch(`${baseUrl}${endpoint}`, {
       ...options,
@@ -39,7 +39,8 @@ export const useWorkflowEngine = (config?: WorkflowEngineConfig) => {
     });
 
     if (!response.ok) {
-      throw new Error(`API call failed: ${response.statusText}`);
+      const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(errorData.detail || `API call failed: ${response.statusText}`);
     }
 
     return response.json();
@@ -58,32 +59,44 @@ export const useWorkflowEngine = (config?: WorkflowEngineConfig) => {
 
       const taskId = taskResponse.task_id;
       
-      // Poll for task completion
+      if (!taskId) {
+        throw new Error('No task_id received from server');
+      }
+      
+      // Poll for task completion using GET /api/tasks (returns all tasks)
       return new Promise((resolve, reject) => {
         const pollInterval = setInterval(async () => {
-	  try {
+          try {
+            // GET /api/tasks returns all tasks, filter by our task_id
             const allTasks = await apiCall('/api/tasks');
             const task = allTasks.find((t: any) => t.task_id === taskId);
             
             if (task && task.status === 'completed') {
               clearInterval(pollInterval);
-              resolve(parseOutput(node.type, task.output));
+              resolve(parseOutput(node.type, task.output || task.result));
             } else if (task && task.status === 'failed') {
               clearInterval(pollInterval);
-              reject(new Error(`Task failed: ${task.output}`));
-            }  
+              reject(new Error(`Task failed: ${task.output || task.error}`));
+            }
+            // Continue polling for running/pending tasks
           } catch (error) {
             clearInterval(pollInterval);
             reject(error);
           }
         }, 2000);
+        
+        // Set timeout for polling (max 5 minutes)
+        setTimeout(() => {
+          clearInterval(pollInterval);
+          reject(new Error('Task execution timeout'));
+        }, 300000);
       });
     } catch (error) {
       throw new Error(`Failed to execute node ${node.id}: ${error}`);
     }
   };
 
-  // Build command string for each tool
+  // Build command string for each tool aligned with backend capabilities
   const buildCommand = (node: Node, inputData?: any): string => {
     const config = node.config;
     
@@ -104,6 +117,30 @@ export const useWorkflowEngine = (config?: WorkflowEngineConfig) => {
         
       case 'nuclei':
         return `nuclei -u "${config.target || '{{input}}'}" -severity ${config.severity || 'info,low,medium,high,critical'} -json`;
+        
+      case 'httpx':
+        const headers = config.headers ? `-H '${config.headers}'` : '';
+        const data = config.bodyType === 'json' && config.body ? `-d '${config.body}'` : '';
+        return `curl -X ${config.method || 'GET'} ${headers} ${data} "${config.url || '{{input}}'}" --max-time ${config.timeout || 30}`;
+      
+      // Logic nodes - these will be processed by the workflow engine rather than executed as shell commands
+      case 'conditional':
+        return `# Conditional node: ${config.condition || 'true'}`;
+      
+      case 'filter':
+        return `# Filter node: ${config.filterType || 'include'} ${config.field || 'field'} ${config.operator || 'equals'} ${config.value || 'value'}`;
+      
+      case 'merge':
+        return `# Merge node: strategy=${config.mergeStrategy || 'combine'} format=${config.outputFormat || 'array'}`;
+      
+      case 'split':
+        return `# Iterator node: source=${config.sourceType || 'input'} field=${config.inputField || 'data'} batch=${config.batchSize || 10}`;
+      
+      case 'schedule':
+        return `# Wait node: type=${config.waitType || 'fixed'} duration=${config.duration || 5}s`;
+      
+      case 'transform':
+        return `# Transform node: type=${config.transformType || 'map'} expression="${config.expression || 'item => item'}"`;
         
       default:
         throw new Error(`Unknown node type: ${node.type}`);
@@ -156,6 +193,24 @@ export const useWorkflowEngine = (config?: WorkflowEngineConfig) => {
             .filter(Boolean);
           return { findings, count: findings.length };
           
+        case 'httpx':
+          // Parse HTTP response
+          try {
+            const parsed = JSON.parse(rawOutput);
+            return { response: parsed, status: 'success' };
+          } catch {
+            return { response: rawOutput, status: 'success', raw: rawOutput };
+          }
+          
+        // Logic nodes return processed data
+        case 'conditional':
+        case 'filter':
+        case 'merge':
+        case 'split':
+        case 'schedule':
+        case 'transform':
+          return { processed: true, raw: rawOutput };
+          
         default:
           return { raw: rawOutput };
       }
@@ -188,7 +243,7 @@ export const useWorkflowEngine = (config?: WorkflowEngineConfig) => {
     return replacedCommand;
   };
 
-  // Execute entire workflow
+  // Convert legacy workflow to new format
   const convertWorkflow = (legacyWorkflow: Workflow): WorkflowGraph => {
     return {
       id: legacyWorkflow.id,
@@ -267,63 +322,8 @@ export const useWorkflowEngine = (config?: WorkflowEngineConfig) => {
     } finally {
       setIsExecuting(false);
     }
-  }, [workflowEngine, baseUrl, authToken]); 
-  {/*  const execute = useCallback(async (workflow: Workflow) => {
-    setIsExecuting(true);
-    
-    const executionId = `exec-${Date.now()}`;
-    let execution: ExecutionRecord = {
-      id: executionId,
-      workflowId: workflow.id,
-      startTime: new Date().toISOString(),
-      status: 'running',
-      logs: []
-    };
-    
-    setExecutionHistory(prev => [...prev, execution]);
-    
-    try {
-      // Build execution graph
-      const executionOrder = getExecutionOrder(workflow);
-      const nodeOutputs: Record<string, any> = {};
-      
-      // Execute nodes in order
-      for (const nodeId of executionOrder) {
-        const node = workflow.nodes.find(n => n.id === nodeId);
-        if (!node) continue;
-        
-        // Get input data from connected nodes
-        const inputConnection = workflow.connections.find(conn => conn.target === nodeId);
-        const inputData = inputConnection ? nodeOutputs[inputConnection.source] : undefined;
-        
-        try {
-          console.log(`Executing node: ${node.title}`);
-          const output = await executeNode(node, inputData);
-          nodeOutputs[nodeId] = output;
-          
-          execution.logs.push(`✅ ${node.title} completed: ${JSON.stringify(output)}`);
-        } catch (error) {
-          execution.logs.push(`❌ ${node.title} failed: ${error}`);
-          throw error;
-        }
-      }
-      
-      execution.status = 'completed';
-      execution.endTime = new Date().toISOString();
-      
-    } catch (error) {
-      execution.status = 'failed';
-      execution.endTime = new Date().toISOString();
-      execution.logs.push(`❌ Workflow failed: ${error}`);
-      throw error;
-    } finally {
-      setIsExecuting(false);
-      setExecutionHistory(prev => 
-        prev.map(exec => exec.id === executionId ? execution : exec)
-      );
-    }
-  }, []);
-*/}
+  }, [workflowEngine, baseUrl, authToken]);
+
   // Get execution order based on connections
   const getExecutionOrder = (workflow: Workflow): string[] => {
     const visited = new Set<string>();
